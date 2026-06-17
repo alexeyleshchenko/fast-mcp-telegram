@@ -5,13 +5,11 @@ incompatible with aiobotocore's async HTTP layer.
 """
 
 import asyncio
-import os
 import sqlite3
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
-
 
 TEST_BUCKET = "test-session-bucket"
 
@@ -19,12 +17,10 @@ TEST_BUCKET = "test-session-bucket"
 @pytest.fixture(autouse=True)
 def _reset_s3_state():
     """Reset global state between tests."""
-    from src import s3_session
+    from src.s3_session import _manager
 
     yield
-    s3_session._bucket = ""
-    s3_session._shutting_down = False
-    s3_session._client = None
+    _manager.reset_for_testing()
 
 
 @pytest.fixture
@@ -72,9 +68,9 @@ def sample_wal_session(tmp_path):
 
 class TestConfigure:
     def test_sets_bucket(self, configure):
-        from src import s3_session
+        from src.s3_session import _manager
 
-        assert s3_session._bucket == TEST_BUCKET
+        assert _manager._bucket == TEST_BUCKET
 
     def test_rejects_empty(self):
         from src import s3_session
@@ -153,8 +149,9 @@ class TestDownload:
     @pytest.mark.asyncio
     async def test_not_found_client_error(self, configure, tmp_path, mock_client):
         """S3 raises ClientError(NoSuchKey), download converts to FileNotFoundError."""
-        from src import s3_session
         from botocore.exceptions import ClientError
+
+        from src import s3_session
 
         error = ClientError(
             {"Error": {"Code": "NoSuchKey", "Message": "Not Found"}},
@@ -235,7 +232,7 @@ class TestDownload:
         """get_object timeout is handled by botocore config, not our code."""
         from src import s3_session
 
-        mock_client.get_object.side_effect = asyncio.TimeoutError("read timeout")
+        mock_client.get_object.side_effect = TimeoutError("read timeout")
 
         with patch.object(s3_session, "_get_client", return_value=mock_client):
             dest = tmp_path / "timeout.session"
@@ -358,8 +355,9 @@ class TestHealthCheck:
 
     @pytest.mark.asyncio
     async def test_403_raises(self, configure, mock_client):
-        from src import s3_session
         from botocore.exceptions import ClientError
+
+        from src import s3_session
 
         error = ClientError(
             {"Error": {"Code": "403", "Message": "Forbidden"}},
@@ -373,8 +371,9 @@ class TestHealthCheck:
 
     @pytest.mark.asyncio
     async def test_404_raises(self, configure, mock_client):
-        from src import s3_session
         from botocore.exceptions import ClientError
+
+        from src import s3_session
 
         error = ClientError(
             {"Error": {"Code": "404", "Message": "Not Found"}},
@@ -478,6 +477,30 @@ class TestCheckpointAndUpload:
         result = await s3_session.checkpoint_and_upload("bad", corrupt)
         assert result is False
 
+    @pytest.mark.asyncio
+    async def test_checkpoint_failure_skips_upload(self, configure, sample_session, mock_client):
+        """When WAL checkpoint fails, skip S3 upload and return False."""
+        from src import s3_session
+
+        with patch.object(s3_session, "_get_client", return_value=mock_client), \
+             patch.object(s3_session, "checkpoint_session", return_value=False):
+            result = await s3_session.checkpoint_and_upload("ckpt_fail", sample_session)
+
+        assert result is False
+        mock_client.put_object.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_integrity_failure_skips_upload(self, configure, sample_session, mock_client):
+        """When integrity check fails, skip checkpoint+upload and return False."""
+        from src import s3_session
+
+        with patch.object(s3_session, "_get_client", return_value=mock_client), \
+             patch.object(s3_session, "verify_session_integrity", return_value=False):
+            result = await s3_session.checkpoint_and_upload("integ_fail", sample_session)
+
+        assert result is False
+        mock_client.put_object.assert_not_called()
+
 
 # --- close_s3_client() ---
 
@@ -486,10 +509,11 @@ class TestCloseS3Client:
     @pytest.mark.asyncio
     async def test_close(self, configure, mock_client):
         from src import s3_session
+        from src.s3_session import _manager
 
-        s3_session._client = mock_client
+        _manager._client = mock_client
         await s3_session.close_s3_client()
-        assert s3_session._client is None
+        assert _manager._client is None
 
     @pytest.mark.asyncio
     async def test_close_idempotent(self, configure):
@@ -502,12 +526,13 @@ class TestCloseS3Client:
     @pytest.mark.asyncio
     async def test_close_handles_error(self, configure, mock_client):
         from src import s3_session
+        from src.s3_session import _manager
 
         mock_client.__aexit__ = AsyncMock(side_effect=Exception("close error"))
-        s3_session._client = mock_client
+        _manager._client = mock_client
         # Should not raise
         await s3_session.close_s3_client()
-        assert s3_session._client is None
+        assert _manager._client is None
 
 
 # --- mark_shutting_down() ---
@@ -526,8 +551,9 @@ class TestShutdownBehavior:
     @pytest.mark.asyncio
     async def test_shutdown_returns_cached_client(self, configure, mock_client):
         from src import s3_session
+        from src.s3_session import _manager
 
-        s3_session._client = mock_client
+        _manager._client = mock_client
         s3_session.mark_shutting_down()
         result = await s3_session._get_client()
         assert result is mock_client
@@ -536,10 +562,11 @@ class TestShutdownBehavior:
     @pytest.mark.asyncio
     async def test_reset_shutdown_state(self, configure, mock_client):
         from src import s3_session
+        from src.s3_session import _manager
 
         s3_session.mark_shutting_down()
         s3_session.reset_shutdown_state()
-        assert s3_session._shutting_down is False
+        assert _manager._shutting_down is False
 
 
 # --- Constants ---

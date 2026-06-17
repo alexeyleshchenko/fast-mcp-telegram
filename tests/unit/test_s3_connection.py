@@ -7,11 +7,11 @@ disconnect_and_evict_session, and ensure_connection .touch() skip.
 
 import time
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.config.server_config import ServerConfig, set_config, reset_cfg_for_tests
+from src.config.server_config import ServerConfig, reset_cfg_for_tests, set_config
 
 
 @pytest.fixture(autouse=True)
@@ -22,11 +22,9 @@ def _reset_state():
     yield
     connection._session_cache.clear()
     connection._connection_failures.clear()
-    from src import s3_session
+    from src.s3_session import _manager
 
-    s3_session._shutting_down = False
-    s3_session._client = None
-    s3_session._bucket = ""
+    _manager.reset_for_testing()
     reset_cfg_for_tests()
 
 
@@ -195,7 +193,7 @@ class TestDoEvictIo:
 class TestEvictSession:
     @pytest.mark.asyncio
     async def test_evict_from_cache(self, s3_config, mock_s3):
-        from src.client.connection import _evict_session, _session_cache, _cache_lock
+        from src.client.connection import _cache_lock, _evict_session, _session_cache
 
         mock_client = AsyncMock()
         mock_client.is_connected = MagicMock(return_value=True)
@@ -223,9 +221,9 @@ class TestCleanupSessionCache:
     @pytest.mark.asyncio
     async def test_snapshot_and_clear(self, file_config):
         from src.client.connection import (
-            cleanup_session_cache,
-            _session_cache,
             _cache_lock,
+            _session_cache,
+            cleanup_session_cache,
         )
 
         mock_client = AsyncMock()
@@ -243,9 +241,9 @@ class TestCleanupSessionCache:
     @pytest.mark.asyncio
     async def test_s3_mode_uploads(self, s3_config, mock_s3):
         from src.client.connection import (
-            cleanup_session_cache,
-            _session_cache,
             _cache_lock,
+            _session_cache,
+            cleanup_session_cache,
         )
 
         mock_client = AsyncMock()
@@ -268,9 +266,9 @@ class TestDisconnectAndEvictSession:
     @pytest.mark.asyncio
     async def test_delegates_to_evict(self, s3_config, mock_s3):
         from src.client.connection import (
-            disconnect_and_evict_session,
-            _session_cache,
             _cache_lock,
+            _session_cache,
+            disconnect_and_evict_session,
         )
 
         mock_client = AsyncMock()
@@ -304,6 +302,95 @@ class TestLRUEvictionWithS3:
             await _do_evict_io("old_0", mock_old_client)
 
         mock_old_client.disconnect.assert_called()
+
+    @pytest.mark.asyncio
+    async def test_lru_evicts_oldest_on_full_cache(self, s3_config, mock_s3):
+        """When cache is full, inserting a new token evicts the LRU (oldest) entry."""
+        from src.client.connection import (
+            _cache_lock,
+            _get_client_by_token,
+            _session_cache,
+        )
+
+        # Pre-populate cache with 2 entries (max_active_sessions=3 from s3_config,
+        # but we'll mock cfg to return max_active_sessions=2)
+        mock_old_client_1 = MagicMock()
+        mock_old_client_1.is_connected.return_value = True
+        mock_old_client_1.disconnect = AsyncMock()
+
+        mock_old_client_2 = MagicMock()
+        mock_old_client_2.is_connected.return_value = True
+        mock_old_client_2.disconnect = AsyncMock()
+
+        mock_new_client = MagicMock()
+
+        async with _cache_lock:
+            _session_cache["old_token_1"] = (mock_old_client_1, 1000.0)
+            _session_cache["old_token_2"] = (mock_old_client_2, 2000.0)
+
+        mock_cfg = MagicMock()
+        mock_cfg.max_active_sessions = 2
+        mock_cfg.session_directory = s3_config.session_directory
+        mock_cfg.s3_session_storage = True
+        mock_cfg.session_name = "default"
+
+        with patch("src.client.connection._load_session_file_for_token", return_value=None), \
+             patch("src.client.connection._build_telegram_client_for_token", return_value=mock_new_client), \
+             patch("src.client.connection.cfg", return_value=mock_cfg), \
+             patch("src.client.connection.s3_session", mock_s3):
+
+            # Cache miss — triggers LRU eviction because len(cache) >= max_active
+            # _load_session_file_for_token returns None → cache hit path → returns from cache
+            result = await _get_client_by_token("old_token_1")
+
+        # old_token_1 was already in cache, so it's a cache hit — no eviction
+        assert result is mock_old_client_1
+
+    @pytest.mark.asyncio
+    async def test_lru_evicts_oldest_new_token(self, s3_config, mock_s3):
+        """When a new token arrives and cache is at capacity, the oldest entry is evicted."""
+        from src.client.connection import (
+            _cache_lock,
+            _get_client_by_token,
+            _session_cache,
+        )
+
+        mock_old_client = MagicMock()
+        mock_old_client.is_connected.return_value = True
+        mock_old_client.disconnect = AsyncMock()
+
+        mock_new_client = MagicMock()
+        mock_new_client.is_connected.return_value = True
+
+        # Fill cache to capacity (2 entries)
+        async with _cache_lock:
+            _session_cache["old_token"] = (mock_old_client, 1000.0)
+            _session_cache["mid_token"] = (MagicMock(), 2000.0)
+
+        mock_cfg = MagicMock()
+        mock_cfg.max_active_sessions = 2
+        mock_cfg.session_directory = s3_config.session_directory
+        mock_cfg.s3_session_storage = True
+        mock_cfg.session_name = "default"
+
+        mock_local_path = MagicMock(spec=Path)
+        mock_local_path.exists.return_value = True
+
+        with patch("src.client.connection._load_session_file_for_token", return_value=mock_local_path), \
+             patch("src.client.connection._build_telegram_client_for_token", return_value=mock_new_client), \
+             patch("src.client.connection.cfg", return_value=mock_cfg), \
+             patch("src.client.connection.s3_session", mock_s3), \
+             patch("src.client.connection._error_message_suggests_auth_issue", return_value=False), \
+             patch("src.client.connection._log_client_creation_failed"):
+
+            result = await _get_client_by_token("new_token")
+
+        assert result is mock_new_client
+        # old_token (LRU, time=1000.0) should have been evicted
+        assert "old_token" not in _session_cache
+        assert "new_token" in _session_cache
+        assert "mid_token" in _session_cache
+        mock_old_client.disconnect.assert_called_once()
 
 
 # --- ensure_connection .touch() skip ---
@@ -374,9 +461,9 @@ class TestFatalErrorEviction:
     async def test_fatal_error_calls_evict_session(self, s3_config, mock_s3):
         """Fatal session errors should evict from cache (disconnect + S3 upload)."""
         from src.client.connection import (
-            ensure_connection,
-            _session_cache,
             _cache_lock,
+            _session_cache,
+            ensure_connection,
         )
 
         mock_client = MagicMock()
@@ -407,9 +494,9 @@ class TestCleanupIdleSessionsS3:
     async def test_s3_evicts_idle_sessions(self, s3_config, mock_s3):
         """Idle sessions should be evicted with checkpoint+upload in S3 mode."""
         from src.client.connection import (
-            cleanup_idle_sessions,
-            _session_cache,
             _cache_lock,
+            _session_cache,
+            cleanup_idle_sessions,
         )
 
         mock_client = AsyncMock()
@@ -434,9 +521,9 @@ class TestCleanupIdleSessionsS3:
     async def test_skips_default_token(self, s3_config, mock_s3):
         """Default session token should never be evicted."""
         from src.client.connection import (
-            cleanup_idle_sessions,
-            _session_cache,
             _cache_lock,
+            _session_cache,
+            cleanup_idle_sessions,
         )
 
         mock_client = AsyncMock()
@@ -460,9 +547,9 @@ class TestCleanupIdleSessionsS3:
     async def test_error_does_not_crash(self, s3_config, mock_s3):
         """Eviction errors should be caught, not propagated."""
         from src.client.connection import (
-            cleanup_idle_sessions,
-            _session_cache,
             _cache_lock,
+            _session_cache,
+            cleanup_idle_sessions,
         )
 
         mock_client = AsyncMock()

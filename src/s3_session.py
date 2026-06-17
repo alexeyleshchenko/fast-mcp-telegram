@@ -10,7 +10,6 @@ import logging
 import os
 import re
 import sqlite3
-import sys
 from pathlib import Path
 
 import aiobotocore.session
@@ -52,6 +51,12 @@ class _S3ClientManager:
         """Reset shutdown state — used in tests."""
         self._shutting_down = False
 
+    def reset_for_testing(self) -> None:
+        """Reset all state to factory defaults. Used in test fixtures."""
+        self._client = None
+        self._shutting_down = False
+        self._bucket = ""
+
     async def get_client(self):
         """Return cached S3 client, or create new one.
 
@@ -91,35 +96,6 @@ class _S3ClientManager:
 
 
 _manager = _S3ClientManager()
-
-# Module-level backward-compatible accessors — tests access _client/_shutting_down/_bucket directly.
-# __getattr__/__setattr__ on the module class intercept these and delegate to _manager.
-
-
-class _Module(sys.modules[__name__].__class__):
-    """Intercept module-level attribute access for backward compatibility."""
-
-    _MANAGED_ATTRS = frozenset(("_client", "_shutting_down", "_bucket"))
-
-    def __getattr__(self, name: str):
-        if name in self._MANAGED_ATTRS:
-            return getattr(_manager, name)
-        return super().__getattr__(name)
-
-    def __setattr__(self, name: str, value):
-        if name in self._MANAGED_ATTRS:
-            if name == "_client":
-                _manager._client = value
-            elif name == "_shutting_down":
-                _manager._shutting_down = value
-            elif name == "_bucket":
-                _manager._bucket = value
-            return
-        super().__setattr__(name, value)
-
-
-sys.modules[__name__].__class__ = _Module
-
 
 MAX_DOWNLOAD_BYTES = 10 * 1024 * 1024  # 10MB
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # 20MB — reject corrupted runaway sessions
