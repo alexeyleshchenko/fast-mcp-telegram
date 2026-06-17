@@ -28,6 +28,7 @@ def _config_mock(session_dir: Path, inactive_days: int):
     with patch("src.client.connection.cfg") as mock:
         mock.return_value.session_directory = session_dir
         mock.return_value.inactive_session_days = inactive_days
+        mock.return_value.s3_session_storage = False
         yield mock
 
 

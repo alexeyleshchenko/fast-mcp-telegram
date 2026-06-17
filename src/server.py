@@ -7,6 +7,7 @@ import asyncio
 import contextlib
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Literal
 
 from fastmcp import FastMCP
@@ -15,6 +16,7 @@ from src.client.connection import (
     _cleanup_inactive_sessions,
     cleanup_idle_sessions,
     cleanup_session_cache,
+    is_s3_enabled,
     validate_api_credentials,
 )
 from src.config.logging import setup_logging
@@ -82,15 +84,56 @@ async def _run_inactivity_cleanup():
         logger.info("Inactivity cleanup: removed %s session(s)", deleted)
 
 
+async def _init_s3() -> None:
+    """Verify S3 prerequisites and run startup health check. Raises on failure."""
+    try:
+        import aiobotocore  # noqa: F401
+    except ImportError:
+        logger.critical(
+            "S3_SESSION_STORAGE=true but aiobotocore not installed. "
+            "Install with: pip install fast-mcp-telegram[s3]"
+        )
+        raise SystemExit(1) from None
+    from src import s3_session
+
+    s3_session.configure(cfg().s3_bucket)
+    await s3_session.health_check()
+    logger.info("✓ S3 session storage: bucket '%s' verified", cfg().s3_bucket)
+
+
+async def _shutdown_s3() -> None:
+    """Graceful S3 shutdown: close client after all evictions are done."""
+    from src import s3_session
+    try:
+        await asyncio.wait_for(s3_session.close_s3_client(), timeout=5)
+    except TimeoutError:
+        logger.warning("Shutdown: S3 client close timed out")
+
+
+def _cleanup_orphan_tmp_files(session_dir: Path) -> None:
+    """Remove orphaned .session.tmp files from previous crashes."""
+    if session_dir.exists():
+        for tmp_file in session_dir.glob("*.session.tmp"):
+            logger.info("Removing orphaned temp file: %s", tmp_file.name)
+            tmp_file.unlink(missing_ok=True)
+
+
 @asynccontextmanager
 async def lifespan(app: FastMCP):
     """Lifecycle manager for the MCP server."""
+    # Startup: S3 session storage health check
+    if is_s3_enabled():
+        await _init_s3()
+
     # Startup: validate credentials early
     try:
         validate_api_credentials()
     except ValueError as e:
         logger.error("❌ Configuration error: %s", e)
         raise
+
+    # Startup: remove orphaned temp files from previous crashes
+    _cleanup_orphan_tmp_files(cfg().session_directory)
 
     # Startup: background cleanup
     global _cleanup_task, _telemetry_task
@@ -107,12 +150,24 @@ async def lifespan(app: FastMCP):
         with contextlib.suppress(asyncio.CancelledError):
             await _telemetry_task
 
+    # Graceful S3 shutdown: mark shutting down → evict all sessions → close S3 client
+    if is_s3_enabled():
+        from src import s3_session
+
+        s3_session.mark_shutting_down()
+
+    # Cancel background cleanup task
     if _cleanup_task:
         _cleanup_task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await _cleanup_task
 
+    # Evict all cached sessions (handles S3 upload when enabled)
     await cleanup_session_cache()
+
+    # Close S3 client after all evictions are done
+    if is_s3_enabled():
+        await _shutdown_s3()
 
 
 setup_logging()

@@ -48,7 +48,7 @@ Configured in [src/config/server_config.py](../src/config/server_config.py). Doc
 ### Authentication and sessions
 
 - **QR login (new):** Scan a QR code from Telegram mobile to authenticate — no phone number, no verification code, no 2FA. Available on the `/setup` page as the default auth method.
-- Per-user Bearer tokens (256-bit) with browser web setup ([Installation.md](Installation.md#web-setup-interface))
+- Per-user Bearer tokens (43-char URL-safe) with browser web setup ([Installation.md](Installation.md#web-setup-interface))
 - Session files at `~/.config/fast-mcp-telegram/{token}.session`
 - LRU session cache (`MAX_ACTIVE_SESSIONS`) in [src/client/connection.py](../src/client/connection.py)
 - URL-based auth for headerless clients: `/v1/url_auth/{token}/mcp/...` ([SECURITY.md](../SECURITY.md))

@@ -267,6 +267,30 @@ class ServerConfig(BaseSettings):
         ),
     )
 
+    # S3 session storage for ephemeral Docker deployments
+    s3_session_storage: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("s3_session_storage", "S3_SESSION_STORAGE"),
+        description="Enable S3-backed session storage for ephemeral deployments.",
+    )
+    s3_bucket: str = Field(
+        default="",
+        validation_alias=AliasChoices("s3_bucket", "AWS_S3_BUCKET"),
+        description="S3 bucket name for session storage (required when s3_session_storage=true).",
+    )
+
+    def model_post_init(self, _context) -> None:
+        """Fail-fast validation for incompatible config combinations."""
+        if self.s3_session_storage and self.disable_auth:
+            raise ValueError(
+                "S3_SESSION_STORAGE=true is incompatible with DISABLE_AUTH. "
+                "S3 mode requires bearer token authentication."
+            )
+        if self.s3_session_storage and not self.s3_bucket:
+            raise ValueError(
+                "AWS_S3_BUCKET is required when S3_SESSION_STORAGE=true"
+            )
+
     # Backward compatibility: DISABLE_AUTH environment variable
     disable_auth_env: str | None = Field(
         default=None,
