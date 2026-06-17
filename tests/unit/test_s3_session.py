@@ -242,6 +242,37 @@ class TestDownload:
             with pytest.raises(asyncio.TimeoutError):
                 await s3_session.download("timeout_token", dest)
 
+    @pytest.mark.asyncio
+    async def test_os_error_on_write_cleans_up_tmp(self, configure, tmp_path, mock_client):
+        """Disk full during atomic write should raise OSError and clean up temp file."""
+        from src import s3_session
+
+        data = b"valid session data"
+        mock_client.get_object.return_value = {
+            "Body": _MockStream(data),
+            "ContentLength": len(data),
+        }
+
+        dest = tmp_path / "diskfull.session"
+        tmp_file = dest.with_suffix(".session.tmp")
+
+        original_write_bytes = Path.write_bytes
+
+        def _fail_write(self, data):
+            if str(self).endswith(".session.tmp"):
+                raise OSError("No space left on device")
+            return original_write_bytes(self, data)
+
+        with patch.object(s3_session, "_get_client", return_value=mock_client), \
+             patch.object(Path, "write_bytes", _fail_write):
+            with pytest.raises(OSError, match="disk full"):
+                await s3_session.download("diskfull_token", dest)
+
+        # Temp file should be cleaned up even on failure
+        assert not tmp_file.exists()
+        # Dest should not exist (rename never happened)
+        assert not dest.exists()
+
 
 # --- upload() ---
 

@@ -397,3 +397,86 @@ class TestFatalErrorEviction:
             assert result is False
             # Session should be evicted from cache
             assert "fatal_token" not in _session_cache
+
+
+# --- cleanup_idle_sessions S3 behavior ---
+
+
+class TestCleanupIdleSessionsS3:
+    @pytest.mark.asyncio
+    async def test_s3_evicts_idle_sessions(self, s3_config, mock_s3):
+        """Idle sessions should be evicted with checkpoint+upload in S3 mode."""
+        from src.client.connection import (
+            cleanup_idle_sessions,
+            _session_cache,
+            _cache_lock,
+        )
+
+        mock_client = AsyncMock()
+        mock_client.is_connected = MagicMock(return_value=True)
+
+        # Set max_idle_time_seconds to 1 second for the test
+        s3_config.max_idle_time_seconds = 1
+
+        # Insert a session with old last_access time
+        async with _cache_lock:
+            _session_cache["idle_s3_token"] = (mock_client, time.time() - 10)
+
+        with patch("src.client.connection.s3_session", mock_s3), \
+             patch("src.client.connection.cfg", return_value=s3_config):
+            await cleanup_idle_sessions()
+
+        # Session should be evicted and checkpoint+upload called
+        assert "idle_s3_token" not in _session_cache
+        mock_s3.checkpoint_and_upload.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_skips_default_token(self, s3_config, mock_s3):
+        """Default session token should never be evicted."""
+        from src.client.connection import (
+            cleanup_idle_sessions,
+            _session_cache,
+            _cache_lock,
+        )
+
+        mock_client = AsyncMock()
+        mock_client.is_connected = MagicMock(return_value=True)
+
+        s3_config.max_idle_time_seconds = 1
+        default_token = s3_config.session_name
+
+        async with _cache_lock:
+            _session_cache[default_token] = (mock_client, time.time() - 10)
+
+        with patch("src.client.connection.s3_session", mock_s3), \
+             patch("src.client.connection.cfg", return_value=s3_config):
+            await cleanup_idle_sessions()
+
+        # Default token should NOT be evicted
+        assert default_token in _session_cache
+        mock_s3.checkpoint_and_upload.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_error_does_not_crash(self, s3_config, mock_s3):
+        """Eviction errors should be caught, not propagated."""
+        from src.client.connection import (
+            cleanup_idle_sessions,
+            _session_cache,
+            _cache_lock,
+        )
+
+        mock_client = AsyncMock()
+        mock_client.is_connected = MagicMock(return_value=True)
+        mock_s3.checkpoint_and_upload.side_effect = Exception("S3 down")
+
+        s3_config.max_idle_time_seconds = 1
+
+        async with _cache_lock:
+            _session_cache["error_token"] = (mock_client, time.time() - 10)
+
+        with patch("src.client.connection.s3_session", mock_s3), \
+             patch("src.client.connection.cfg", return_value=s3_config):
+            # Should NOT raise
+            await cleanup_idle_sessions()
+
+        assert "error_token" not in _session_cache

@@ -10,6 +10,7 @@ import logging
 import os
 import re
 import sqlite3
+import sys
 from pathlib import Path
 
 import aiobotocore.session
@@ -18,79 +19,138 @@ from botocore.exceptions import ClientError
 
 logger = logging.getLogger(__name__)
 
-# --- S3 client singleton (thread-safe) ---
-_client = None
-_client_lock = asyncio.Lock()
-_bucket: str = ""
-_shutting_down = False  # Set during graceful shutdown — reject new S3 client creation
+
+# --- S3 client lifecycle manager ---
+
+class _S3ClientManager:
+    """Encapsulates S3 client lifecycle: creation, caching, shutdown coordination.
+
+    Replaces scattered globals (_client, _client_lock, _shutting_down, _bucket)
+    with a single cohesive class.
+    """
+
+    def __init__(self) -> None:
+        self._client = None
+        self._lock = asyncio.Lock()
+        self._bucket: str = ""
+        self._shutting_down = False
+
+    def configure(self, bucket: str) -> None:
+        """Set the S3 bucket name. Called once at startup."""
+        bucket = bucket.strip() if bucket else ""
+        if not bucket:
+            raise ValueError("AWS_S3_BUCKET is required when S3_SESSION_STORAGE=true")
+        self._bucket = bucket
+
+    def mark_shutting_down(self) -> None:
+        """Called once during graceful shutdown. After this, get_client() only
+        returns cached clients (needed for eviction uploads) — new client creation
+        is blocked."""
+        self._shutting_down = True
+
+    def reset_shutdown_state(self) -> None:
+        """Reset shutdown state — used in tests."""
+        self._shutting_down = False
+
+    async def get_client(self):
+        """Return cached S3 client, or create new one.
+
+        During shutdown (_shutting_down=True): returns cached client (needed for
+        eviction uploads), but blocks creation of NEW clients.
+        """
+        async with self._lock:
+            # Return cached client even during shutdown — eviction uploads need it
+            if self._client is not None:
+                return self._client
+            # No cached client — block new creation during shutdown
+            if self._shutting_down:
+                raise RuntimeError(
+                    "S3 client shutting down — cannot create new client"
+                )
+            session = aiobotocore.session.get_session()
+            self._client = await session.create_client(
+                "s3",
+                config=BotoConfig(
+                    read_timeout=5,
+                    connect_timeout=3,
+                    retries={"max_attempts": 3, "mode": "adaptive"},
+                ),
+            ).__aenter__()
+            return self._client
+
+    async def close(self) -> None:
+        """Close S3 client. Used for both reset (stale TCP) and shutdown cleanup."""
+        async with self._lock:
+            old = self._client
+            self._client = None  # Clear reference BEFORE __aexit__ — avoids stale ref on exception
+            if old is not None:
+                try:
+                    await old.__aexit__(None, None, None)
+                except Exception as e:
+                    logger.warning(f"S3 client close error: {e}")
+
+
+_manager = _S3ClientManager()
+
+# Module-level backward-compatible accessors — tests access _client/_shutting_down/_bucket directly.
+# __getattr__/__setattr__ on the module class intercept these and delegate to _manager.
+
+
+class _Module(sys.modules[__name__].__class__):
+    """Intercept module-level attribute access for backward compatibility."""
+
+    _MANAGED_ATTRS = frozenset(("_client", "_shutting_down", "_bucket"))
+
+    def __getattr__(self, name: str):
+        if name in self._MANAGED_ATTRS:
+            return getattr(_manager, name)
+        return super().__getattr__(name)
+
+    def __setattr__(self, name: str, value):
+        if name in self._MANAGED_ATTRS:
+            if name == "_client":
+                _manager._client = value
+            elif name == "_shutting_down":
+                _manager._shutting_down = value
+            elif name == "_bucket":
+                _manager._bucket = value
+            return
+        super().__setattr__(name, value)
+
+
+sys.modules[__name__].__class__ = _Module
+
 
 MAX_DOWNLOAD_BYTES = 10 * 1024 * 1024  # 10MB
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # 20MB — reject corrupted runaway sessions
 _S3_KEY_RE = re.compile(r'^[a-zA-Z0-9._-]{1,256}$')
 
 
+# --- Module-level convenience functions (delegate to _manager) ---
+
 def configure(bucket: str):
     """Set the S3 bucket name. Called once at startup."""
-    global _bucket
-    bucket = bucket.strip() if bucket else ""
-    if not bucket:
-        raise ValueError("AWS_S3_BUCKET is required when S3_SESSION_STORAGE=true")
-    _bucket = bucket
+    _manager.configure(bucket)
 
 
 def mark_shutting_down():
-    """Called once during graceful shutdown. After this, _get_client() only
-    returns cached clients (needed for eviction uploads) — new client creation
-    is blocked."""
-    global _shutting_down
-    _shutting_down = True
+    """Called once during graceful shutdown."""
+    _manager.mark_shutting_down()
 
 
 def reset_shutdown_state():
     """Reset shutdown state — used in tests."""
-    global _shutting_down
-    _shutting_down = False
+    _manager.reset_shutdown_state()
 
 
 async def _get_client():
-    """Return cached S3 client, or create new one.
-
-    During shutdown (_shutting_down=True): returns cached client (needed for
-    eviction uploads), but blocks creation of NEW clients.
-    """
-    global _client
-    async with _client_lock:
-        # Return cached client even during shutdown — eviction uploads need it
-        if _client is not None:
-            return _client
-        # No cached client — block new creation during shutdown
-        if _shutting_down:
-            raise RuntimeError(
-                "S3 client shutting down — cannot create new client"
-            )
-        session = aiobotocore.session.get_session()
-        _client = await session.create_client(
-            "s3",
-            config=BotoConfig(
-                read_timeout=5,
-                connect_timeout=3,
-                retries={"max_attempts": 3, "mode": "adaptive"},
-            ),
-        ).__aenter__()
-        return _client
+    """Return cached S3 client, or create new one. Delegates to _manager."""
+    return await _manager.get_client()
 
 
 async def close_s3_client():
     """Close S3 client. Used for both reset (stale TCP) and shutdown cleanup."""
-    global _client
-    async with _client_lock:
-        old = _client
-        _client = None  # Clear reference BEFORE __aexit__ — avoids stale ref on exception
-        if old is not None:
-            try:
-                await old.__aexit__(None, None, None)
-            except Exception as e:
-                logger.warning(f"S3 client close error: {e}")
+    await _manager.close()
 
 
 def _s3_key(token: str) -> str:
@@ -98,6 +158,36 @@ def _s3_key(token: str) -> str:
     if not token or not _S3_KEY_RE.match(token):
         raise ValueError(f"Invalid token for S3 key: {token[:8]}...")
     return f"{token}.session"
+
+
+def _validate_download_sizes(
+    content_length: int | None, data: bytes, token_prefix: str
+) -> None:
+    """Check download size against MAX_DOWNLOAD_BYTES.
+
+    Validates both the ContentLength header (pre-read) and actual data length
+    (post-read). ContentLength can be None on some S3-compatible services or
+    spoofed on non-TLS connections, so both checks are needed.
+
+    Raises:
+        ValueError: if data exceeds MAX_DOWNLOAD_BYTES.
+        FileNotFoundError: if data is empty.
+    """
+    if content_length is not None:
+        if content_length > MAX_DOWNLOAD_BYTES:
+            raise ValueError(
+                f"S3 object too large ({content_length} bytes, max {MAX_DOWNLOAD_BYTES}) "
+                f"for token {token_prefix}..."
+            )
+        if content_length == 0:
+            raise FileNotFoundError(f"Empty session for token {token_prefix}...")
+    if len(data) > MAX_DOWNLOAD_BYTES:
+        raise ValueError(
+            f"S3 object too large ({len(data)} bytes, max {MAX_DOWNLOAD_BYTES}) "
+            f"for token {token_prefix}..."
+        )
+    if len(data) == 0:
+        raise FileNotFoundError(f"Empty session for token {token_prefix}...")
 
 
 async def download(token: str, dest: Path) -> None:
@@ -109,31 +199,22 @@ async def download(token: str, dest: Path) -> None:
     client = await _get_client()
     tmp_path = dest.with_suffix(".session.tmp")
     try:
-        resp = await client.get_object(Bucket=_bucket, Key=_s3_key(token))
-        # Check size before reading — ContentLength can be None on some
-        # S3-compatible services, so only check when available.
+        resp = await client.get_object(Bucket=_manager._bucket, Key=_s3_key(token))
         content_length = resp.get("ContentLength")
-        if content_length is not None:
-            if content_length > MAX_DOWNLOAD_BYTES:
-                await resp["Body"].close()
-                raise ValueError(
-                    f"S3 object too large ({content_length} bytes, max {MAX_DOWNLOAD_BYTES}) "
-                    f"for token {token[:8]}..."
-                )
-            if content_length == 0:
-                await resp["Body"].close()
-                raise FileNotFoundError(f"Empty session for token {token[:8]}...")
-        async with resp["Body"] as stream:
-            data = await stream.read()
-        # Post-read size check — ContentLength can be None on some S3-compatible
-        # services, and can be spoofed on non-TLS connections
-        if len(data) > MAX_DOWNLOAD_BYTES:
+        # Pre-read size check (ContentLength header)
+        if content_length is not None and content_length > MAX_DOWNLOAD_BYTES:
+            await resp["Body"].close()
             raise ValueError(
-                f"S3 object too large ({len(data)} bytes, max {MAX_DOWNLOAD_BYTES}) "
+                f"S3 object too large ({content_length} bytes, max {MAX_DOWNLOAD_BYTES}) "
                 f"for token {token[:8]}..."
             )
-        if len(data) == 0:
+        if content_length is not None and content_length == 0:
+            await resp["Body"].close()
             raise FileNotFoundError(f"Empty session for token {token[:8]}...")
+        async with resp["Body"] as stream:
+            data = await stream.read()
+        # Post-read size check (actual data — ContentLength can be None/spoofed)
+        _validate_download_sizes(content_length, data, token[:8])
         # Atomic write: temp file then rename
         try:
             await asyncio.to_thread(tmp_path.write_bytes, data)
@@ -172,7 +253,7 @@ async def upload(token: str, src: Path) -> None:
                 f"Session file too large ({len(data)} bytes, max {MAX_UPLOAD_BYTES}) "
                 f"for token {token[:8]}..."
             )
-        await client.put_object(Bucket=_bucket, Key=_s3_key(token), Body=data)
+        await client.put_object(Bucket=_manager._bucket, Key=_s3_key(token), Body=data)
     except Exception as e:
         logger.warning(f"S3 upload failed for {token[:8]}...: {e}")
         raise
@@ -182,7 +263,7 @@ async def delete(token: str) -> None:
     """Delete session file from S3. Raises on failure (caller decides handling)."""
     client = await _get_client()
     try:
-        await client.delete_object(Bucket=_bucket, Key=_s3_key(token))
+        await client.delete_object(Bucket=_manager._bucket, Key=_s3_key(token))
     except Exception as e:
         logger.warning(f"S3 delete failed for {token[:8]}...: {e}")
         raise
@@ -191,24 +272,25 @@ async def delete(token: str) -> None:
 async def health_check() -> None:
     """Verify S3 connectivity, credentials, and read+write access. Raises on failure."""
     client = await _get_client()
+    bucket = _manager._bucket
     # Verify read access
     try:
-        await client.head_bucket(Bucket=_bucket)
+        await client.head_bucket(Bucket=bucket)
     except ClientError as e:
         code = e.response['Error']['Code']
         if code == '403':
-            raise RuntimeError(f"S3 bucket '{_bucket}' access denied — check credentials") from e
+            raise RuntimeError(f"S3 bucket '{bucket}' access denied — check credentials") from e
         if code == '404':
-            raise RuntimeError(f"S3 bucket '{_bucket}' not found") from e
+            raise RuntimeError(f"S3 bucket '{bucket}' not found") from e
         raise
     # Verify write access (small put, will be overwritten on next health check)
     try:
         await client.put_object(
-            Bucket=_bucket, Key=".health-check", Body=b"",
+            Bucket=bucket, Key=".health-check", Body=b"",
             Metadata={"purpose": "health"},
         )
     except Exception as e:
-        raise RuntimeError(f"S3 bucket '{_bucket}' readable but not writable: {e}") from e
+        raise RuntimeError(f"S3 bucket '{bucket}' readable but not writable: {e}") from e
 
 
 # --- SQLite helpers (separate connection, not Telethon's _conn) ---

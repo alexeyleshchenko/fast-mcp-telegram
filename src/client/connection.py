@@ -416,38 +416,29 @@ def _log_client_creation_failed(
     )
 
 
-async def _get_client_by_token(token: str) -> TelegramClient:
-    """Get or create a TelegramClient instance for the given token."""
-    # Check cache (under lock)
-    async with _cache_lock:
-        current_time = time.time()
-        if token in _session_cache:
-            client, _ = _session_cache[token]
-            _session_cache[token] = (client, current_time)
-            return client
+async def _load_session_file_for_token(token: str) -> Path:
+    """Resolve or download the session file for *token*.
 
-    # Cache miss — release _cache_lock before client building (network I/O)
-    evicted = None
+    In S3 mode: acquire _download_lock, double-check cache, download from S3
+    with local fallback, verify integrity. In file mode: just resolve the path.
 
+    Lock discipline: _download_lock is acquired/released here. The caller
+    must NOT hold _download_lock when calling this function.
+    """
     if is_s3_enabled():
-        # Acquire _download_lock ONLY for S3 download (~200ms), NOT Telegram I/O.
-        # This prevents duplicate downloads for the same token while allowing
-        # parallel client building for different tokens.
         async with _download_lock:
             # Double-check cache after acquiring download lock
             async with _cache_lock:
                 if token in _session_cache:
                     client, _ = _session_cache[token]
                     _session_cache[token] = (client, time.time())
-                    return client
+                    return None  # type: ignore[return-value]  # sentinel: cache hit
 
-            # Resolve path (validates token)
             try:
                 local_path = _resolve_session_path_for_token(token)
             except InvalidSessionTokenError as e:
                 raise SessionNotAuthorizedError("Invalid bearer token") from e
 
-            # Download from S3
             local_path.parent.mkdir(parents=True, exist_ok=True)
             try:
                 await s3_session.download(token, local_path)
@@ -458,7 +449,6 @@ async def _get_client_by_token(token: str) -> TelegramClient:
                 logger.warning(f"S3 download failed for {token[:8]}..., trying local fallback: {e}")
                 if not local_path.exists():
                     raise SessionNotAuthorizedError(token) from e
-                # Local file exists from a previous session — verify it
                 if not await s3_session.verify_session_integrity(local_path):
                     local_path.unlink(missing_ok=True)
                     raise SessionNotAuthorizedError(token) from e
@@ -467,11 +457,30 @@ async def _get_client_by_token(token: str) -> TelegramClient:
                 if not await s3_session.verify_session_integrity(local_path):
                     local_path.unlink(missing_ok=True)
                     raise TelegramTransportError("Downloaded session file is corrupt")
+            return local_path
     else:
         try:
-            local_path = _resolve_session_path_for_token(token)
+            return _resolve_session_path_for_token(token)
         except InvalidSessionTokenError as e:
             raise SessionNotAuthorizedError("Invalid bearer token") from e
+
+
+async def _get_client_by_token(token: str) -> TelegramClient:
+    """Get or create a TelegramClient instance for the given token."""
+    # Check cache (under lock)
+    async with _cache_lock:
+        current_time = time.time()
+        if token in _session_cache:
+            client, _ = _session_cache[token]
+            _session_cache[token] = (client, current_time)
+            return client
+
+    # Cache miss — load session file (may download from S3)
+    local_path = await _load_session_file_for_token(token)
+    if local_path is None:
+        # Cache hit inside _load_session_file_for_token (double-check after download lock)
+        async with _cache_lock:
+            return _session_cache[token][0]
 
     # Build client (NO lock — Telegram I/O, 2-5s)
     try:
@@ -485,12 +494,9 @@ async def _get_client_by_token(token: str) -> TelegramClient:
         _log_client_creation_failed(local_path, token, e)
         raise
 
-    # LRU eviction + cache insert (single _cache_lock acquisition)
-    # Double-check: another concurrent request may have inserted the same token
-    # while we were building the client (outside lock).
+    # Insert into cache with LRU eviction (double-check for concurrent inserts)
     async with _cache_lock:
         if token in _session_cache:
-            # Another request won the race — discard our orphaned client
             existing_client, _ = _session_cache[token]
             if existing_client is not client:
                 logger.info(f"Concurrent request already cached token {token[:8]}..., discarding duplicate")
@@ -502,6 +508,7 @@ async def _get_client_by_token(token: str) -> TelegramClient:
             return _session_cache[token][0]
 
         max_active = cfg().max_active_sessions
+        evicted = None
         if len(_session_cache) >= max_active:
             oldest_token = min(_session_cache, key=lambda k: _session_cache[k][1])
             evicted = (oldest_token, _session_cache.pop(oldest_token, None))
