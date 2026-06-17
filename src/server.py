@@ -15,6 +15,7 @@ from src.client.connection import (
     _cleanup_inactive_sessions,
     cleanup_idle_sessions,
     cleanup_session_cache,
+    is_s3_enabled,
     validate_api_credentials,
 )
 from src.config.logging import setup_logging
@@ -85,6 +86,17 @@ async def _run_inactivity_cleanup():
 @asynccontextmanager
 async def lifespan(app: FastMCP):
     """Lifecycle manager for the MCP server."""
+    # Startup: S3 session storage health check
+    if is_s3_enabled():
+        from src import s3_session
+        try:
+            s3_session.configure(cfg().s3_bucket)
+            await s3_session.health_check()
+            logger.info("✓ S3 session storage: bucket '%s' verified", cfg().s3_bucket)
+        except Exception as e:
+            logger.error("❌ S3 session storage startup check failed: %s", e)
+            raise
+
     # Startup: validate credentials early
     try:
         validate_api_credentials()
@@ -106,6 +118,24 @@ async def lifespan(app: FastMCP):
         _telemetry_task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await _telemetry_task
+
+    # Graceful S3 shutdown: evict all sessions → upload to S3 → close client
+    if is_s3_enabled():
+        from src import s3_session
+        from src.client.connection import _cache_lock, _session_cache
+
+        s3_session.mark_shutting_down()
+        async with _cache_lock:
+            tokens = list(_session_cache.keys())
+        if tokens:
+            logger.info("Shutdown: uploading %d cached session(s) to S3...", len(tokens))
+            for t in tokens:
+                try:
+                    from src.client.connection import _evict_session
+                    await asyncio.wait_for(_evict_session(t), timeout=10)
+                except Exception as e:
+                    logger.warning("Shutdown: failed to evict %s...: %s", t[:8], e)
+        await s3_session.close_s3_client()
 
     if _cleanup_task:
         _cleanup_task.cancel()

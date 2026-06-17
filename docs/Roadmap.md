@@ -2,7 +2,7 @@
 
 Official priorities for fast-mcp-telegram. Capability facts live in [Strategic-Market-Positioning.md](Strategic-Market-Positioning.md). Third-party Gemini research is under [research/](research/).
 
-Last updated: 2026-06-15.
+Last updated: 2026-06-17.
 
 ## North star
 
@@ -113,7 +113,7 @@ flowchart LR
 | 5. Smithery URL-based listing | In progress | **P1** | Distribution | `master` | Register tg-mcp.l1979.ru on Smithery as URL-based deployment |
 | 6. GG scaffold | In progress | **P2** | QA | `feature/evals` | Six gate cases, mock baseline, PR workflow |
 | 7. GG depth + live eval | Planned | **P2** | QA | `feature/evals` | Cases driven by telemetry; optional VDS live matrix |
-| 8. Database session storage | Planned | **P1** | Infrastructure | `master` | Replace file-based .session with PostgreSQL/Redis storage |
+| 8. S3 session storage | Planned | **P1** | Infrastructure | `master` | Store Telethon `.session` files in S3-compatible object storage. Download on connect, upload on disconnect. Unblocks ephemeral hosted deployments. See [ADR 0006](adr/0006-s3-session-storage.md) |
 | 9. Smithery Hosted migration | Planned | **P1** | Infrastructure | `master` | Move from URL-based to Smithery-hosted containers |
 | 10. ACL audit and design | Done | **P3** | Trust | `feature/acl` | [acl-operator-research.md](research/acl-operator-research.md), [acl-design-brief.md](research/acl-design-brief.md) |
 | 11. ACL MVP | Done (not merged) | **P3** | Trust | `feature/acl` | [session_acl.py](../src/server_components/session_acl.py) — deferred until multi-user demand grows |
@@ -178,7 +178,7 @@ See [evals/README.md](../evals/README.md) on branch `feature/evals`.
 | ACL v2 permission matrix | Trust | Prgebish-style read/send per chat |
 | Prompt-injection scanner | Trust | After ACL + QA coverage |
 | OAuth2 / IdP | Enterprise | Federation path |
-| **External session storage** (PostgreSQL / Redis) | Infrastructure | **Phase 2 of Smithery plan.** Persistent Telethon sessions for ephemeral deployments (Smithery Hosted). Options: PostgreSQL-backed session store or Redis-based StringSession cache. Unblocks userbot scenarios in hosted Docker environments. See [research/session-storage-design.md](research/session-storage-design.md) |
+| **S3 session storage** | Infrastructure | **P1 — see step 8.** Store Telethon `.session` files in S3-compatible object storage (AWS S3, MinIO, R2, Tigris). Download on connect, upload on disconnect. Preserves entity cache and update state across ephemeral container restarts. Unblocks Smithery Hosted and other MCP registry deployments. See [ADR 0006](adr/0006-s3-session-storage.md) |
 | **QR login auth** | ✅ **SHIPPED** | Auth | Telethon QR login — scan QR from Telegram mobile, no phone/OTP/2FA. Deployed at tg-mcp.l1979.ru. See [ADR 0004](adr/0004-qr-login-auth.md) |
 | **Setup via agent dialog** | Infrastructure | ⛔ **SUPERSEDED** by QR login approach (see [ADR 0004](adr/0004-qr-login-auth.md)) — OIDC + MCP elicitation replaced by Telethon QR login |
 | **Remote file upload (base64)** ✅ PR #103, #104, #105 | Features | `data:...;base64` inline payloads in `files` param (all modes). `;filename=name.ext` preserves original names. Images sent as inline photos, docs as documents. `tg-mcp-call` auto-inlines local paths as data: URIs. |

@@ -18,7 +18,11 @@ from telethon.errors import PasswordHashInvalidError, SessionPasswordNeededError
 from telethon.errors.rpcerrorlist import PhoneNumberFloodError
 from telethon.tl.functions.account import GetPasswordRequest
 
-from src.client.connection import disconnect_and_evict_session, generate_bearer_token
+from src.client.connection import (
+    disconnect_and_evict_session,
+    generate_bearer_token,
+    is_s3_enabled,
+)
 from src.config.server_config import ServerMode, cfg
 from src.server_components.auth_middleware import generate_url_based_config
 from src.server_components.qr_login import QrLoginError, QrLoginManager
@@ -27,8 +31,8 @@ from src.server_components.session_token_validation import (
     session_file_path,
     validate_session_token,
 )
-from src.utils.mcp_config import generate_mcp_config_json
 from src.utils.logging_utils import mask_phone_number
+from src.utils.mcp_config import generate_mcp_config_json
 from src.utils.proxy import build_mtproto_client_args
 
 # Constants
@@ -269,6 +273,16 @@ async def _persist_session_and_generate_config(
     except Exception as e:
         return _setup_error_fragment(request, f"Failed to persist session: {e}")
 
+    # S3: checkpoint + upload newly created session
+    if is_s3_enabled():
+        from src import s3_session
+        try:
+            await s3_session._checkpoint_and_upload(token, dst)
+            logger.info("S3: uploaded new session for %s...", token[:8])
+        except Exception as e:
+            # Non-fatal: session works locally, will be uploaded on next eviction
+            logger.warning("S3 upload failed for new session %s...: %s", token[:8], e)
+
     domain = cfg().domain
     header_config_json = generate_mcp_config_json(
         ServerMode.HTTP_AUTH, session_name="", bearer_token=token, domain=domain,
@@ -362,6 +376,15 @@ async def setup_complete_reauth(request: Request):
 
         # Replace original session with reauthorized one
         temp_path.replace(original_path)
+
+        # S3: checkpoint + upload reauthorized session
+        if is_s3_enabled():
+            from src import s3_session
+            try:
+                await s3_session._checkpoint_and_upload(existing_token, original_path)
+                logger.info("S3: uploaded reauthorized session for %s...", existing_token[:8])
+            except Exception as e:
+                logger.warning("S3 upload failed for reauth %s...: %s", existing_token[:8], e)
 
         # Clean up
         state.clear()
@@ -757,7 +780,17 @@ def register_web_setup_routes(mcp_app):
             await disconnect_and_evict_session(token)
 
             # Delete the session file
-            session_path.unlink()
+            # missing_ok: in S3 mode, _do_evict_io may have already deleted it
+            session_path.unlink(missing_ok=True)
+
+            # S3: delete session from S3
+            if is_s3_enabled():
+                from src import s3_session
+                try:
+                    await s3_session.delete(token)
+                    logger.info("S3: deleted session for %s...", token[:8])
+                except Exception as e:
+                    logger.warning("S3 delete failed for %s...: %s", token[:8], e)
 
             return _fragment(
                 request,

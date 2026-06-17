@@ -23,7 +23,16 @@ from ..server_components.session_token_validation import (
 )
 from ..utils.proxy import build_mtproto_client_args
 
+# S3 session storage — lazy import (only when S3_SESSION_STORAGE=true)
+s3_session = None  # Imported lazily in is_s3_enabled()
+
 logger = logging.getLogger(__name__)
+
+# Global download lock — serializes S3 downloads. Only held for S3 download (~200ms),
+# NOT for Telegram I/O (2-5s). Acceptable for v1.
+# Lock ordering: _download_lock → _cache_lock.
+# Never acquire _download_lock while holding _cache_lock.
+_download_lock = asyncio.Lock()
 
 
 def validate_api_credentials() -> None:
@@ -148,41 +157,98 @@ _connection_failures: dict[
 _failure_lock = asyncio.Lock()
 
 
+# --- S3 helpers ---
+
+def is_s3_enabled() -> bool:
+    """Check if S3 session storage is enabled. Lazy-imports s3_session on first call."""
+    global s3_session
+    if not cfg().s3_session_storage:
+        return False
+    if s3_session is None:
+        from .. import s3_session as _s3
+        s3_session = _s3
+    return True
+
+
+def _s3_local_path(token: str) -> Path:
+    """Local path for S3-downloaded session files. Only used when S3 mode is active."""
+    return cfg().session_directory / f"{token}.session"
+
+
+async def _do_evict_io(token: str, client: TelegramClient) -> None:
+    """Checkpoint, disconnect, upload. NO lock held. Always disconnects in finally."""
+    local_path = _s3_local_path(token)
+    s3_mode = is_s3_enabled()
+    checkpoint_ok = False
+
+    try:
+        # Checkpoint BEFORE disconnect — Telethon's session file still accessible
+        if s3_mode:
+            checkpoint_ok = await s3_session._checkpoint_and_upload(token, local_path)
+    except Exception as e:
+        logger.warning(f"Checkpoint/upload failed for {token[:8]}...: {e}")
+    finally:
+        # Always disconnect — even if checkpoint/upload failed
+        try:
+            if client.is_connected():
+                await client.disconnect()
+        except Exception as e:
+            logger.warning(f"Disconnect failed for {token[:8]}...: {e}")
+    # Delete local file ONLY after successful checkpoint+upload (outside try/finally)
+    if s3_mode and checkpoint_ok and local_path.exists():
+        local_path.unlink(missing_ok=True)
+
+
+async def _evict_session(token: str) -> None:
+    """Pop from cache, checkpoint, disconnect, upload to S3, clean up."""
+    async with _cache_lock:
+        cached = _session_cache.pop(token, None)
+    if cached is None:
+        return
+    client, _ = cached
+    await _do_evict_io(token, client)
+
+
 async def cleanup_idle_sessions():
-    """Disconnect sessions that haven't been used for max_idle_time_seconds."""
+    """Disconnect sessions that haven't been used for max_idle_time_seconds.
+
+    Snapshot idle tokens under lock, then do I/O outside lock to avoid
+    blocking cache operations during disconnect/S3 upload.
+    """
+    # Phase 1: identify and pop idle tokens under lock
+    evict_list: list[tuple[str, TelegramClient, float]] = []
     async with _cache_lock:
         config = cfg()
         max_idle_time = config.max_idle_time_seconds
         if max_idle_time <= 0:
             return
         current_time = time.time()
-        idle_tokens = []
         default_token = config.session_name
 
-        for token, (_client, last_access) in _session_cache.items():
-            # Skip cleanup for default session to preserve legacy behavior
-            if token == default_token:
-                continue
-
-            if current_time - last_access > max_idle_time:
-                idle_tokens.append(token)
+        idle_tokens = [
+            token
+            for token, (_, last_access) in _session_cache.items()
+            if token != default_token and current_time - last_access > max_idle_time
+        ]
 
         for token in idle_tokens:
-            client, last_access = _session_cache[token]
-            try:
-                await client.disconnect()
-                logger.info(
-                    f"Disconnected idle session for token {token[:8]}... (idle for {(current_time - last_access) / 60:.1f}m)"
-                )
-            except Exception as e:
-                logger.warning(f"Error disconnecting idle session {token[:8]}...: {e}")
-            # Remove from cache
-            del _session_cache[token]
+            client, last_access = _session_cache.pop(token)
+            evict_list.append((token, client, last_access))
 
-        if idle_tokens:
+    # Phase 2: disconnect + S3 upload outside lock
+    for token, client, last_access in evict_list:
+        try:
+            await _do_evict_io(token, client)
             logger.info(
-                f"Cleaned up {len(idle_tokens)} idle sessions. Cache now has {len(_session_cache)} sessions"
+                f"Disconnected idle session for token {token[:8]}... (idle for {(time.time() - last_access) / 60:.1f}m)"
             )
+        except Exception as e:
+            logger.warning(f"Error disconnecting idle session {token[:8]}...: {e}")
+
+    if evict_list:
+        logger.info(
+            f"Cleaned up {len(evict_list)} idle sessions. Cache now has {len(_session_cache)} sessions"
+        )
 
 
 def generate_bearer_token() -> str:
@@ -291,31 +357,6 @@ async def _connect_client_and_verify_or_cleanup(
         raise
 
 
-async def _evict_lru_if_session_cache_full() -> None:
-    """Evict least-recently-used session if cache is at capacity. Caller must hold _cache_lock."""
-    max_active = cfg().max_active_sessions
-    if len(_session_cache) < max_active:
-        return
-    logger.warning(
-        f"Session cache full ({len(_session_cache)}/{max_active}), performing LRU eviction"
-    )
-    oldest_token = min(_session_cache.keys(), key=lambda k: _session_cache[k][1])
-    oldest_client, last_access = _session_cache[oldest_token]
-    try:
-        await oldest_client.disconnect()
-        logger.info(
-            f"Disconnected LRU client for token {oldest_token[:8]}... (last accessed {time.ctime(last_access)})"
-        )
-    except Exception as e:
-        logger.warning(
-            f"Error disconnecting LRU client for token {oldest_token[:8]}...: {e}"
-        )
-    del _session_cache[oldest_token]
-    logger.info(
-        f"Evicted LRU session for token {oldest_token[:8]}... Cache now has {len(_session_cache)} sessions"
-    )
-
-
 async def _build_telegram_client_for_token(
     session_path: Path, token: str
 ) -> TelegramClient:
@@ -377,6 +418,7 @@ def _log_client_creation_failed(
 
 async def _get_client_by_token(token: str) -> TelegramClient:
     """Get or create a TelegramClient instance for the given token."""
+    # Check cache (under lock)
     async with _cache_lock:
         current_time = time.time()
         if token in _session_cache:
@@ -384,25 +426,86 @@ async def _get_client_by_token(token: str) -> TelegramClient:
             _session_cache[token] = (client, current_time)
             return client
 
+    # Cache miss — release _cache_lock before client building (network I/O)
+    evicted = None
+
+    if is_s3_enabled():
+        # Acquire _download_lock ONLY for S3 download (~200ms), NOT Telegram I/O.
+        # This prevents duplicate downloads for the same token while allowing
+        # parallel client building for different tokens.
+        async with _download_lock:
+            # Double-check cache after acquiring download lock
+            async with _cache_lock:
+                if token in _session_cache:
+                    client, _ = _session_cache[token]
+                    _session_cache[token] = (client, time.time())
+                    return client
+
+            # Resolve path (validates token)
+            try:
+                local_path = _resolve_session_path_for_token(token)
+            except InvalidSessionTokenError as e:
+                raise SessionNotAuthorizedError("Invalid bearer token") from e
+
+            # Download from S3
+            local_path.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                await s3_session.download(token, local_path)
+            except FileNotFoundError as exc:
+                raise SessionNotAuthorizedError(token) from exc
+            except Exception as e:
+                # S3 unavailable — fall back to local file if it exists
+                logger.warning(f"S3 download failed for {token[:8]}..., trying local fallback: {e}")
+                if not local_path.exists():
+                    raise SessionNotAuthorizedError(token) from e
+                # Local file exists from a previous session — verify it
+                if not await s3_session.verify_session_integrity(local_path):
+                    local_path.unlink(missing_ok=True)
+                    raise SessionNotAuthorizedError(token) from e
+                logger.info(f"Using local fallback for {token[:8]}...")
+            else:
+                if not await s3_session.verify_session_integrity(local_path):
+                    local_path.unlink(missing_ok=True)
+                    raise TelegramTransportError("Downloaded session file is corrupt")
+    else:
         try:
-            session_path = _resolve_session_path_for_token(token)
+            local_path = _resolve_session_path_for_token(token)
         except InvalidSessionTokenError as e:
             raise SessionNotAuthorizedError("Invalid bearer token") from e
 
+    # Build client (NO lock — Telegram I/O, 2-5s)
+    try:
+        client = await _build_telegram_client_for_token(local_path, token)
+    except Exception as e:
+        if _error_message_suggests_auth_issue(e):
+            logger.warning(
+                f"Session file for token {token[:8]}... is invalid — "
+                "keep file for re-authorization via setup page"
+            )
+        _log_client_creation_failed(local_path, token, e)
+        raise
+
+    # LRU eviction + cache insert (single _cache_lock acquisition)
+    async with _cache_lock:
+        max_active = cfg().max_active_sessions
+        if len(_session_cache) >= max_active:
+            oldest_token = min(_session_cache, key=lambda k: _session_cache[k][1])
+            evicted = (oldest_token, _session_cache.pop(oldest_token, None))
+            if evicted[1]:
+                logger.info(f"Evicting LRU session: {oldest_token[:8]}...")
+        _session_cache[token] = (client, time.time())
+
+    # Eviction I/O outside lock — catch exceptions so the requesting caller
+    # doesn't see an unrelated S3 error for a different session
+    if evicted and evicted[1]:
+        evict_token, (evict_client, _) = evicted
         try:
-            client = await _build_telegram_client_for_token(session_path, token)
-            await _evict_lru_if_session_cache_full()
-            _session_cache[token] = (client, current_time)
-            logger.info(f"Created new session for token {token[:8]}...")
-            return client
+            await _do_evict_io(evict_token, evict_client)
         except Exception as e:
-            if _error_message_suggests_auth_issue(e):
-                logger.warning(
-                    f"Session file for token {token[:8]}... is invalid — "
-                    "keep file for re-authorization via setup page"
-                )
-            _log_client_creation_failed(session_path, token, e)
-            raise
+            logger.warning(f"LRU eviction I/O failed for {evict_token[:8]}...: {e}")
+
+    logger.info(f"Created new session for token {token[:8]}...")
+    return client
 
 
 async def get_connected_client() -> TelegramClient:
@@ -471,10 +574,12 @@ async def ensure_connection(client: TelegramClient, token: str) -> bool:
                 _connection_failures.pop(token, None)
 
             # Touch session file so mtime reflects last-active (for inactivity cleanup)
-            with contextlib.suppress(InvalidSessionTokenError, OSError):
-                _resolve_session_path_for_token(token).with_suffix(".session").touch(
-                    exist_ok=True
-                )
+            # In S3 mode, skip — Telethon's mtime isn't meaningful for session persistence
+            if not is_s3_enabled():
+                with contextlib.suppress(InvalidSessionTokenError, OSError):
+                    _resolve_session_path_for_token(token).with_suffix(".session").touch(
+                        exist_ok=True
+                    )
 
         return client.is_connected()
     except SessionNotAuthorizedError:
@@ -504,9 +609,8 @@ async def ensure_connection(client: TelegramClient, token: str) -> bool:
                 "Session file kept for re-authorization via setup page."
             )
 
-            # Remove from cache so caller gets a fresh client attempt next time
-            async with _cache_lock:
-                _session_cache.pop(token, None)
+            # Evict from cache (disconnect + S3 upload if enabled)
+            await _evict_session(token)
 
             # Don't record as a connection failure, just fail immediately
             return False
@@ -598,18 +702,26 @@ async def _cleanup_inactive_sessions() -> int:
 
 
 async def cleanup_session_cache():
-    """Clean up all cached client sessions."""
-    async with _cache_lock:
-        for token, (client, _) in _session_cache.items():
-            try:
-                await client.disconnect()
-                logger.info(f"Disconnected cached client for token {token[:8]}...")
-            except Exception as e:
-                logger.warning(
-                    f"Error disconnecting cached client for token {token[:8]}...: {e}"
-                )
+    """Clean up all cached client sessions.
 
-    _session_cache.clear()
+    Snapshot all entries + clear under one _cache_lock acquisition, then
+    do disconnect I/O outside lock to avoid blocking new cache operations.
+    """
+    # Phase 1: snapshot + clear under lock
+    async with _cache_lock:
+        entries = list(_session_cache.items())
+        _session_cache.clear()
+
+    # Phase 2: disconnect (and S3 upload if enabled) outside lock
+    for token, (client, _) in entries:
+        try:
+            await _do_evict_io(token, client)
+            logger.info(f"Disconnected cached client for token {token[:8]}...")
+        except Exception as e:
+            logger.warning(
+                f"Error disconnecting cached client for token {token[:8]}...: {e}"
+            )
+
     logger.info("Cleaned up all session cache entries")
 
 
@@ -620,17 +732,7 @@ async def disconnect_and_evict_session(token: str) -> None:
     caller needs the cached client disconnected before removing the
     on-disk session file.
     """
-    async with _cache_lock:
-        if token not in _session_cache:
-            return
-        client, _ = _session_cache.pop(token)
-        try:
-            await client.disconnect()
-            logger.info("Disconnected and evicted session for token %s...", token[:8])
-        except Exception as e:
-            logger.warning(
-                "Error disconnecting session %s... during eviction: %s", token[:8], e
-            )
+    await _evict_session(token)
 
 
 async def get_session_health_stats() -> dict:

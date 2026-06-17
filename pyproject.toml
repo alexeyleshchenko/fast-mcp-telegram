@@ -46,6 +46,12 @@ Issues = "https://github.com/leshchenko1979/fast-mcp-telegram/issues"
 fast-mcp-telegram = "src.server:main"
 fast-mcp-telegram-setup = "src.cli_setup:sync_main"
 
+[project.optional-dependencies]
+s3 = [
+    "aiobotocore>=2.15",
+    "boto3>=1.34",
+]
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["src*"]
