@@ -129,6 +129,42 @@ class TestDoEvictIo:
         mock_client.disconnect.assert_called_once()
 
     @pytest.mark.asyncio
+    async def test_s3_mode_deletes_local_file_on_success(self, s3_config, mock_s3, tmp_path):
+        """Local file is deleted only after successful checkpoint+upload."""
+        from src.client.connection import _do_evict_io, _s3_local_path
+
+        local_path = _s3_local_path("test_token")
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        local_path.write_bytes(b"fake session")
+
+        mock_client = AsyncMock()
+        mock_client.is_connected = MagicMock(return_value=True)
+        mock_s3.checkpoint_and_upload = AsyncMock(return_value=True)
+
+        with patch("src.client.connection.s3_session", mock_s3):
+            await _do_evict_io("test_token", mock_client)
+
+        assert not local_path.exists(), "Local file should be deleted after successful upload"
+
+    @pytest.mark.asyncio
+    async def test_s3_mode_keeps_local_file_on_failure(self, s3_config, mock_s3, tmp_path):
+        """Local file is preserved when checkpoint+upload fails."""
+        from src.client.connection import _do_evict_io, _s3_local_path
+
+        local_path = _s3_local_path("test_token")
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        local_path.write_bytes(b"fake session")
+
+        mock_client = AsyncMock()
+        mock_client.is_connected = MagicMock(return_value=True)
+        mock_s3.checkpoint_and_upload = AsyncMock(return_value=False)
+
+        with patch("src.client.connection.s3_session", mock_s3):
+            await _do_evict_io("test_token", mock_client)
+
+        assert local_path.exists(), "Local file should be preserved when upload fails"
+
+    @pytest.mark.asyncio
     async def test_non_s3_mode_disconnect_only(self, file_config):
         from src.client.connection import _do_evict_io
 
