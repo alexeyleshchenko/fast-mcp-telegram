@@ -88,6 +88,14 @@ async def lifespan(app: FastMCP):
     """Lifecycle manager for the MCP server."""
     # Startup: S3 session storage health check
     if is_s3_enabled():
+        try:
+            import aiobotocore  # noqa: F401
+        except ImportError:
+            logger.critical(
+                "S3_SESSION_STORAGE=true but aiobotocore not installed. "
+                "Install with: pip install fast-mcp-telegram[s3]"
+            )
+            raise SystemExit(1) from None
         from src import s3_session
         try:
             s3_session.configure(cfg().s3_bucket)
@@ -104,6 +112,13 @@ async def lifespan(app: FastMCP):
         logger.error("❌ Configuration error: %s", e)
         raise
 
+    # Startup: remove orphaned .session.tmp files from previous crashes
+    session_dir = cfg().session_directory
+    if session_dir.exists():
+        for tmp_file in session_dir.glob("*.session.tmp"):
+            logger.info("Removing orphaned temp file: %s", tmp_file.name)
+            tmp_file.unlink(missing_ok=True)
+
     # Startup: background cleanup
     global _cleanup_task, _telemetry_task
     _cleanup_task = asyncio.create_task(cleanup_loop())
@@ -119,30 +134,28 @@ async def lifespan(app: FastMCP):
         with contextlib.suppress(asyncio.CancelledError):
             await _telemetry_task
 
-    # Graceful S3 shutdown: evict all sessions → upload to S3 → close client
+    # Graceful S3 shutdown: mark shutting down → evict all sessions → close S3 client
     if is_s3_enabled():
         from src import s3_session
-        from src.client.connection import _cache_lock, _session_cache
 
         s3_session.mark_shutting_down()
-        async with _cache_lock:
-            tokens = list(_session_cache.keys())
-        if tokens:
-            logger.info("Shutdown: uploading %d cached session(s) to S3...", len(tokens))
-            for t in tokens:
-                try:
-                    from src.client.connection import _evict_session
-                    await asyncio.wait_for(_evict_session(t), timeout=10)
-                except Exception as e:
-                    logger.warning("Shutdown: failed to evict %s...: %s", t[:8], e)
-        await s3_session.close_s3_client()
 
+    # Cancel background cleanup task
     if _cleanup_task:
         _cleanup_task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await _cleanup_task
 
+    # Evict all cached sessions (handles S3 upload when enabled)
+    # Dynamic timeout: 10s per session, min 25s, max 120s
     await cleanup_session_cache()
+
+    # Close S3 client after all evictions are done
+    if is_s3_enabled():
+        try:
+            await asyncio.wait_for(s3_session.close_s3_client(), timeout=5)
+        except TimeoutError:
+            logger.warning("Shutdown: S3 client close timed out")
 
 
 setup_logging()

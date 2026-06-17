@@ -77,7 +77,7 @@ def mock_s3():
     mock.health_check = AsyncMock()
     mock.checkpoint_session = AsyncMock(return_value=True)
     mock.verify_session_integrity = AsyncMock(return_value=True)
-    mock._checkpoint_and_upload = AsyncMock(return_value=True)
+    mock.checkpoint_and_upload = AsyncMock(return_value=True)
     mock.close_s3_client = AsyncMock()
     mock.mark_shutting_down = MagicMock()
     mock.reset_shutdown_state = MagicMock()
@@ -125,7 +125,7 @@ class TestDoEvictIo:
         with patch("src.client.connection.s3_session", mock_s3):
             await _do_evict_io("test_token", mock_client)
 
-        mock_s3._checkpoint_and_upload.assert_called_once()
+        mock_s3.checkpoint_and_upload.assert_called_once()
         mock_client.disconnect.assert_called_once()
 
     @pytest.mark.asyncio
@@ -142,7 +142,7 @@ class TestDoEvictIo:
     async def test_disconnect_always_called_on_error(self, s3_config, mock_s3):
         from src.client.connection import _do_evict_io
 
-        mock_s3._checkpoint_and_upload.side_effect = Exception("S3 down")
+        mock_s3.checkpoint_and_upload.side_effect = Exception("S3 down")
         mock_client = AsyncMock()
         mock_client.is_connected = MagicMock(return_value=True)
 
@@ -222,7 +222,7 @@ class TestCleanupSessionCache:
             await cleanup_session_cache()
 
         assert len(_session_cache) == 0
-        mock_s3._checkpoint_and_upload.assert_called()
+        mock_s3.checkpoint_and_upload.assert_called()
 
 
 # --- disconnect_and_evict_session() ---
@@ -261,7 +261,7 @@ class TestLRUEvictionWithS3:
         mock_old_client = AsyncMock()
         mock_old_client.is_connected = MagicMock(return_value=True)
 
-        mock_s3._checkpoint_and_upload.side_effect = Exception("S3 down")
+        mock_s3.checkpoint_and_upload.side_effect = Exception("S3 down")
 
         with patch("src.client.connection.s3_session", mock_s3):
             # Should not raise even though eviction I/O fails

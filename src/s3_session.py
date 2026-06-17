@@ -257,7 +257,7 @@ async def verify_session_integrity(session_path: Path) -> bool:
         return False
 
 
-async def _checkpoint_and_upload(token: str, local_path: Path) -> bool:
+async def checkpoint_and_upload(token: str, local_path: Path) -> bool:
     """Checkpoint WAL then upload to S3. Returns False if checkpoint fails (skip upload).
 
     Shared by _do_evict_io and /setup flow to avoid duplication.
@@ -274,8 +274,3 @@ async def _checkpoint_and_upload(token: str, local_path: Path) -> bool:
         return False
     await upload(token, local_path)
     return True
-
-
-async def _reset_client():
-    """Alias for close_s3_client — reset stale TCP connections."""
-    await close_s3_client()

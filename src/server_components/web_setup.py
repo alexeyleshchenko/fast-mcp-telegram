@@ -277,11 +277,19 @@ async def _persist_session_and_generate_config(
     if is_s3_enabled():
         from src import s3_session
         try:
-            await s3_session._checkpoint_and_upload(token, dst)
-            logger.info("S3: uploaded new session for %s...", token[:8])
+            if not await s3_session.checkpoint_and_upload(token, dst):
+                return _setup_error_fragment(
+                    request,
+                    "Session created but WAL checkpoint failed. "
+                    "Session will work now but won't survive container restart.",
+                )
         except Exception as e:
-            # Non-fatal: session works locally, will be uploaded on next eviction
-            logger.warning("S3 upload failed for new session %s...: %s", token[:8], e)
+            logger.error("S3 upload after /setup failed for %s...: %s", token[:8], e)
+            return _setup_error_fragment(
+                request,
+                f"Session created but S3 backup failed: {e}. "
+                "Session will work now but won't survive container restart.",
+            )
 
     domain = cfg().domain
     header_config_json = generate_mcp_config_json(
@@ -381,7 +389,7 @@ async def setup_complete_reauth(request: Request):
         if is_s3_enabled():
             from src import s3_session
             try:
-                await s3_session._checkpoint_and_upload(existing_token, original_path)
+                await s3_session.checkpoint_and_upload(existing_token, original_path)
                 logger.info("S3: uploaded reauthorized session for %s...", existing_token[:8])
             except Exception as e:
                 logger.warning("S3 upload failed for reauth %s...: %s", existing_token[:8], e)
@@ -776,21 +784,17 @@ def register_web_setup_routes(mcp_app):
             )
 
         try:
-            # Disconnect client from cache if it's active
+            # Evict from cache (checkpoint + disconnect + upload to preserve state)
             await disconnect_and_evict_session(token)
 
-            # Delete the session file
-            # missing_ok: in S3 mode, _do_evict_io may have already deleted it
-            session_path.unlink(missing_ok=True)
-
-            # S3: delete session from S3
+            # S3: delete session from S3 BEFORE local unlink
             if is_s3_enabled():
                 from src import s3_session
-                try:
-                    await s3_session.delete(token)
-                    logger.info("S3: deleted session for %s...", token[:8])
-                except Exception as e:
-                    logger.warning("S3 delete failed for %s...: %s", token[:8], e)
+                await s3_session.delete(token)
+                logger.info("S3: deleted session for %s...", token[:8])
+
+            # Delete local file (may already be gone if S3 mode evicted it)
+            session_path.unlink(missing_ok=True)
 
             return _fragment(
                 request,

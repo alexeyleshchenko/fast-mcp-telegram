@@ -184,7 +184,7 @@ async def _do_evict_io(token: str, client: TelegramClient) -> None:
     try:
         # Checkpoint BEFORE disconnect — Telethon's session file still accessible
         if s3_mode:
-            checkpoint_ok = await s3_session._checkpoint_and_upload(token, local_path)
+            checkpoint_ok = await s3_session.checkpoint_and_upload(token, local_path)
     except Exception as e:
         logger.warning(f"Checkpoint/upload failed for {token[:8]}...: {e}")
     finally:
@@ -486,7 +486,21 @@ async def _get_client_by_token(token: str) -> TelegramClient:
         raise
 
     # LRU eviction + cache insert (single _cache_lock acquisition)
+    # Double-check: another concurrent request may have inserted the same token
+    # while we were building the client (outside lock).
     async with _cache_lock:
+        if token in _session_cache:
+            # Another request won the race — discard our orphaned client
+            existing_client, _ = _session_cache[token]
+            if existing_client is not client:
+                logger.info(f"Concurrent request already cached token {token[:8]}..., discarding duplicate")
+                try:
+                    if client.is_connected():
+                        await client.disconnect()
+                except Exception:
+                    pass
+            return _session_cache[token][0]
+
         max_active = cfg().max_active_sessions
         if len(_session_cache) >= max_active:
             oldest_token = min(_session_cache, key=lambda k: _session_cache[k][1])
@@ -654,6 +668,11 @@ async def _cleanup_inactive_sessions() -> int:
     config = cfg()
     inactive_days = config.inactive_session_days
     if inactive_days <= 0:
+        return 0
+
+    # S3 mode: skip inactive cleanup. S3 LastModified reflects upload time,
+    # not session activity — using it would incorrectly delete active sessions.
+    if is_s3_enabled():
         return 0
 
     cutoff = time.time() - inactive_days * 86400

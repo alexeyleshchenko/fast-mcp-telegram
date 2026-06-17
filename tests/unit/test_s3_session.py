@@ -417,7 +417,7 @@ class TestVerifySessionIntegrity:
         assert await s3_session.verify_session_integrity(dir_path) is False
 
 
-# --- _checkpoint_and_upload() ---
+# --- checkpoint_and_upload() ---
 
 
 class TestCheckpointAndUpload:
@@ -426,7 +426,7 @@ class TestCheckpointAndUpload:
         from src import s3_session
 
         with patch.object(s3_session, "_get_client", return_value=mock_client):
-            result = await s3_session._checkpoint_and_upload("cpu_token", sample_session)
+            result = await s3_session.checkpoint_and_upload("cpu_token", sample_session)
 
         assert result is True
         mock_client.put_object.assert_called_once()
@@ -435,7 +435,7 @@ class TestCheckpointAndUpload:
     async def test_missing_local_file(self, configure, tmp_path):
         from src import s3_session
 
-        result = await s3_session._checkpoint_and_upload("nope", tmp_path / "nope.session")
+        result = await s3_session.checkpoint_and_upload("nope", tmp_path / "nope.session")
         assert result is False
 
     @pytest.mark.asyncio
@@ -444,7 +444,7 @@ class TestCheckpointAndUpload:
 
         corrupt = tmp_path / "corrupt.session"
         corrupt.write_bytes(b"not sqlite")
-        result = await s3_session._checkpoint_and_upload("bad", corrupt)
+        result = await s3_session.checkpoint_and_upload("bad", corrupt)
         assert result is False
 
 
@@ -509,19 +509,6 @@ class TestShutdownBehavior:
         s3_session.mark_shutting_down()
         s3_session.reset_shutdown_state()
         assert s3_session._shutting_down is False
-
-
-# --- reset_client() ---
-
-
-class TestResetClient:
-    @pytest.mark.asyncio
-    async def test_reset_client_delegates(self, configure, mock_client):
-        from src import s3_session
-
-        s3_session._client = mock_client
-        await s3_session._reset_client()
-        assert s3_session._client is None
 
 
 # --- Constants ---
