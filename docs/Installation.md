@@ -226,6 +226,53 @@ Optional **per-principal limits** on shared `http-auth` hosts: choose which chat
 
 ---
 
+## S3 Session Storage (optional)
+
+For **ephemeral hosted deployments** (Smithery Hosted, Fly.io, Railway) where containers have no persistent volumes. Session files are stored in S3-compatible object storage — downloaded on connect, uploaded on disconnect.
+
+When disabled (`S3_SESSION_STORAGE` empty), sessions are local files — no change from current behavior.
+
+### Setup
+
+1. Create an S3 bucket (AWS S3, MinIO, Cloudflare R2, Tigris, Hetzner, etc.)
+2. Set environment variables:
+
+```bash
+S3_SESSION_STORAGE=true
+AWS_S3_BUCKET=fast-mcp-telegram-sessions
+AWS_ACCESS_KEY_ID=AKIA...
+AWS_SECRET_ACCESS_KEY=...
+# Optional: custom endpoint for non-AWS S3
+# AWS_ENDPOINT_URL=http://minio:9000
+# AWS_REGION=us-east-1
+```
+
+3. Install with S3 extras: `uv pip install fast-mcp-telegram[s3]`
+
+### Platform quick-start
+
+| Platform | S3 service | How |
+|----------|-----------|-----|
+| **Fly.io** | Tigris | `fly storage create` — auto-sets `AWS_*` vars |
+| **Railway** | S3 add-on | One-click — auto-sets `AWS_*` vars |
+| **Cloudflare** | R2 | Free egress. Set `AWS_ENDPOINT_URL=https://<account>.r2.cloudflarestorage.com` |
+| **AWS** | S3 | IAM role or `AWS_*` vars |
+| **Self-hosted** | MinIO | Docker sidecar, `AWS_ENDPOINT_URL=http://minio:9000` |
+
+### How it works
+
+- **On first connect:** downloads `{token}.session` from S3 to local disk, verifies integrity
+- **On eviction/disconnect:** WAL-checkpoints the SQLite session file, uploads to S3
+- **On setup:** after QR/phone auth, session is uploaded to S3 immediately
+- **On setup_delete:** session is evicted (flush + upload), then deleted from S3
+- **Fallback:** if S3 is unavailable, falls back to local file mode
+
+### ADR and design doc
+
+Architecture decisions: [ADR 0006](adr/0006-s3-session-storage.md). Implementation details: [design doc](design/s3-session-storage-design.md).
+
+---
+
 ## Configuration Reference
 
 ### Environment Variables
