@@ -625,6 +625,15 @@ def register_web_setup_routes(mcp_app):
             return _setup_token_path_error_fragment(
                 request, "fragments/reauthorize_token_form.html", e
             )
+        # S3 fallback: try downloading session from S3 if local file is missing
+        if not session_path.exists() and is_s3_enabled():
+            from src import s3_session
+            try:
+                if await s3_session.download(existing_token, session_path):
+                    logger.info("S3: downloaded session for reauthorize %s...", existing_token[:8])
+            except Exception as e:
+                logger.warning("S3 download failed for reauthorize %s...: %s", existing_token[:8], e)
+
         if not session_path.exists():
             return _fragment(
                 request,
@@ -776,7 +785,8 @@ def register_web_setup_routes(mcp_app):
             return _setup_token_path_error_fragment(
                 request, "fragments/delete_session_form.html", e
             )
-        if not session_path.exists():
+        # S3 mode: local file may be evicted — skip existence check
+        if not is_s3_enabled() and not session_path.exists():
             return _fragment(
                 request,
                 "fragments/delete_session_form.html",
