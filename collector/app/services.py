@@ -43,6 +43,8 @@ class StorageBackend(Protocol):
         self, retention_days: int = RETENTION_DAYS
     ) -> int: ...
 
+    def last_event_at(self) -> object: ...
+
 
 class RateLimitError(Exception):
     """The sender has exceeded their rate limit."""

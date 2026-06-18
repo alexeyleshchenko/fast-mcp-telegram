@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import sys
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from app.services import (
@@ -51,9 +52,30 @@ def create_handler(
 
         def do_GET(self) -> None:
             if self.path == "/health":
-                return self._json_response(
-                    {"status": "ok", "service": "telemetry-collector"}
-                )
+                now = time.time()
+                try:
+                    last = storage.last_event_at()
+                except Exception:
+                    last = None
+
+                if last is not None:
+                    last_ts = last.timestamp() if hasattr(last, "timestamp") else float(last)
+                    seconds_ago = round(now - last_ts)
+                    last_iso = (
+                        last.isoformat()
+                        if hasattr(last, "isoformat")
+                        else str(last)
+                    )
+                else:
+                    seconds_ago = None
+                    last_iso = None
+
+                return self._json_response({
+                    "status": "ok",
+                    "service": "telemetry-collector",
+                    "last_heartbeat_at": last_iso,
+                    "seconds_since_last_heartbeat": seconds_ago,
+                })
             self._json_response({"error": "not found"}, 404)
 
         def do_POST(self) -> None:

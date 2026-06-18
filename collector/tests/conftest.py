@@ -77,6 +77,12 @@ class InMemoryStorage:
         self.events = keep
         return removed
 
+    def last_event_at(self):
+        """Return the timestamp of the most recent event, or None."""
+        if not self.events:
+            return None
+        return max(e["received_at"] for e in self.events)
+
     def cleanup_ttl(self, retention_days: int = 90) -> int:
         cutoff = datetime.now(UTC) - timedelta(days=retention_days)
         before = len(self.events)

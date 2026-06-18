@@ -15,6 +15,9 @@ Schema:
 from __future__ import annotations
 
 import json
+import sys
+from datetime import datetime, timezone
+from typing import Any
 
 import psycopg2
 import psycopg2.extras
@@ -38,9 +41,20 @@ _SQL_INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_telemetry_payload_hash ON telemetry(payload_hash)",
 ]
 
+# TCP keepalive options — prevent PostgreSQL from silently dropping idle connections.
+_KEEPALIVES = {
+    "keepalives": 1,
+    "keepalives_idle": 30,
+    "keepalives_interval": 10,
+    "keepalives_count": 5,
+}
+
 
 class PgStorage:
     """Production PostgreSQL backend for the collector.
+
+    Includes automatic reconnection on stale/dead connections and TCP
+    keepalive settings to prevent idle disconnects.
 
     Usage:
         storage = PgStorage(dsn="postgres://user:pass@host/db")
@@ -57,7 +71,7 @@ class PgStorage:
 
     def connect(self) -> None:
         """Create connection and ensure table exists."""
-        self._conn = psycopg2.connect(self._dsn)
+        self._conn = psycopg2.connect(self._dsn, **_KEEPALIVES)
         with self._conn.cursor() as cur:
             cur.execute(_SQL_CREATE_TABLE)
             for idx in _SQL_INDEXES:
@@ -69,6 +83,31 @@ class PgStorage:
         if self._conn:
             self._conn.close()
             self._conn = None
+
+    def _ensure_connection(self) -> None:
+        """Ping the connection and reconnect if it's dead."""
+        if self._conn is None:
+            self.connect()
+            return
+        try:
+            with self._conn.cursor() as cur:
+                cur.execute("SELECT 1")
+        except (psycopg2.InterfaceError, psycopg2.OperationalError):
+            print("Database connection stale — reconnecting…", file=sys.stderr)
+            try:
+                self._conn.close()
+            except Exception:
+                pass
+            self.connect()
+
+    def _execute(self, func: Any) -> Any:
+        """Execute *func(cursor)* with automatic retry on stale connection."""
+        try:
+            return func()
+        except (psycopg2.InterfaceError, psycopg2.OperationalError):
+            print("Query failed on stale connection — retrying…", file=sys.stderr)
+            self._ensure_connection()
+            return func()
 
     # ---- storage interface ----
 
@@ -84,48 +123,71 @@ class PgStorage:
         passed in — the storage backend does not recompute it.
         """
         payload_json = json.dumps(payload.to_dict())
-        with self._conn.cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO telemetry
-                    (instance_id, payload, payload_hash, source_ip_hash)
-                VALUES (%s, %s::jsonb, %s, %s)
-                """,
-                (payload.iid, payload_json, payload_hash, source_ip_hash),
-            )
-        self._conn.commit()
+
+        def _do() -> None:
+            with self._conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO telemetry
+                        (instance_id, payload, payload_hash, source_ip_hash)
+                    VALUES (%s, %s::jsonb, %s, %s)
+                    """,
+                    (payload.iid, payload_json, payload_hash, source_ip_hash),
+                )
+            self._conn.commit()
+
+        self._execute(_do)
 
     def count_recent_events(
         self, instance_id: str, window_hours: int = 24
     ) -> int:
         """Count events for a given instance_id within a time window."""
-        with self._conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT COUNT(*) AS cnt FROM telemetry
-                WHERE instance_id = %s
-                  AND received_at >= NOW() - make_interval(hours => %s)
-                """,
-                (instance_id, window_hours),
-            )
-            row = cur.fetchone()
-            return row[0] if row else 0
+
+        def _do() -> int:
+            with self._conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT COUNT(*) AS cnt FROM telemetry
+                    WHERE instance_id = %s
+                      AND received_at >= NOW() - make_interval(hours => %s)
+                    """,
+                    (instance_id, window_hours),
+                )
+                row = cur.fetchone()
+                return row[0] if row else 0
+
+        return self._execute(_do)
 
     def has_exact_payload(
         self, payload_hash: str, window_seconds: int = 300
     ) -> bool:
         """Check if an identical payload hash exists within the time window."""
-        with self._conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT 1 FROM telemetry
-                WHERE payload_hash = %s
-                  AND received_at >= NOW() - make_interval(secs => %s)
-                LIMIT 1
-                """,
-                (payload_hash, window_seconds),
-            )
-            return cur.fetchone() is not None
+
+        def _do() -> bool:
+            with self._conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT 1 FROM telemetry
+                    WHERE payload_hash = %s
+                      AND received_at >= NOW() - make_interval(secs => %s)
+                    LIMIT 1
+                    """,
+                    (payload_hash, window_seconds),
+                )
+                return cur.fetchone() is not None
+
+        return self._execute(_do)
+
+    def last_event_at(self) -> datetime | None:
+        """Return the timestamp of the most recent event, or ``None``."""
+
+        def _do() -> datetime | None:
+            with self._conn.cursor() as cur:
+                cur.execute("SELECT MAX(received_at) FROM telemetry")
+                row = cur.fetchone()
+                return row[0] if row and row[0] else None
+
+        return self._execute(_do)
 
     def enforce_row_cap(self, max_rows: int = 10_000_000) -> int:
         """Delete oldest rows when count exceeds max_rows.
@@ -137,34 +199,42 @@ class PgStorage:
 
         Reference: https://dba.stackexchange.com/a/183096
         """
-        with self._conn.cursor() as cur:
-            cur.execute(
-                """
-                WITH boundary AS (
-                    SELECT id FROM telemetry
-                    ORDER BY id DESC
-                    OFFSET %s LIMIT 1
+
+        def _do() -> int:
+            with self._conn.cursor() as cur:
+                cur.execute(
+                    """
+                    WITH boundary AS (
+                        SELECT id FROM telemetry
+                        ORDER BY id DESC
+                        OFFSET %s LIMIT 1
+                    )
+                    DELETE FROM telemetry
+                    WHERE id <= (SELECT id FROM boundary)
+                      AND EXISTS (SELECT 1 FROM boundary)
+                    """,
+                    (max_rows,),
                 )
-                DELETE FROM telemetry
-                WHERE id <= (SELECT id FROM boundary)
-                  AND EXISTS (SELECT 1 FROM boundary)
-                """,
-                (max_rows,),
-            )
-            result = cur.rowcount
-        self._conn.commit()
-        return result
+                result = cur.rowcount
+            self._conn.commit()
+            return result
+
+        return self._execute(_do)
 
     def cleanup_ttl(self, retention_days: int = 90) -> int:
         """Purge rows older than retention_days."""
-        with self._conn.cursor() as cur:
-            cur.execute(
-                """
-                DELETE FROM telemetry
-                WHERE received_at < NOW() - make_interval(days => %s)
-                """,
-                (retention_days,),
-            )
-            result = cur.rowcount
-        self._conn.commit()
-        return result
+
+        def _do() -> int:
+            with self._conn.cursor() as cur:
+                cur.execute(
+                    """
+                    DELETE FROM telemetry
+                    WHERE received_at < NOW() - make_interval(days => %s)
+                    """,
+                    (retention_days,),
+                )
+                result = cur.rowcount
+            self._conn.commit()
+            return result
+
+        return self._execute(_do)
