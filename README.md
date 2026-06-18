@@ -1,3 +1,5 @@
+mcp-name: io.github.leshchenko1979/fast-mcp-telegram
+
 <img alt="Hero image" src="https://github.com/user-attachments/assets/635236f6-b776-41c7-b6e5-0dd14638ecc1" />
 
 **Telegram MCP Server** — Model Context Protocol (MCP) gateway for Telegram. 8 context-efficient tools, multi-tenant, MTProto bridge.

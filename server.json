@@ -1,71 +1,49 @@
 {
-  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json",
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.leshchenko1979/fast-mcp-telegram",
   "description": "Multi-tenant Telegram gateway for AI agents — HTTP+stdio, 8 tools, MTProto User API",
-  "status": "active",
-  "website_url": "https://github.com/leshchenko1979/fast-mcp-telegram",
+  "version": "0.35.0",
+  "websiteUrl": "https://github.com/leshchenko1979/fast-mcp-telegram",
   "repository": {
     "url": "https://github.com/leshchenko1979/fast-mcp-telegram",
     "source": "github"
   },
-  "homepage_url": "https://github.com/leshchenko1979/fast-mcp-telegram",
-  "documentation_url": "https://github.com/leshchenko1979/fast-mcp-telegram#readme",
-  "issues_url": "https://github.com/leshchenko1979/fast-mcp-telegram/issues",
-  "releases_url": "https://github.com/leshchenko1979/fast-mcp-telegram/releases",
-  "author": "Alexey Leshchenko",
-  "contact_email": "leshchenko@gmail.com",
-  "license": "MIT",
-  "keywords": [
-    "mcp",
-    "telegram",
-    "mtproto",
-    "multi-tenant",
-    "gateway",
-    "ai-agent"
-  ],
-  "languages": [
-    "python"
-  ],
-  "runtime": "python>=3.10",
-  "publisher": "io.github.leshchenko1979",
   "packages": [
     {
-      "registry_type": "pypi",
-      "registry_base_url": "https://pypi.org",
+      "registryType": "pypi",
       "identifier": "fast-mcp-telegram",
-      "version": "0.5.0",
+      "version": "0.35.0",
       "transport": {
         "type": "stdio"
       },
-      "environment_variables": [
+      "environmentVariables": [
         {
           "name": "API_ID",
-          "description": "Telegram API ID (from https://my.telegram.org/apps)",
-          "is_required": true
+          "description": "Telegram API ID from my.telegram.org",
+          "isRequired": true
         },
         {
           "name": "API_HASH",
-          "description": "Telegram API Hash (from https://my.telegram.org/apps)",
-          "is_required": true,
-          "is_secret": true
+          "description": "Telegram API Hash from my.telegram.org",
+          "isRequired": true,
+          "isSecret": true
         },
         {
           "name": "SERVER_MODE",
           "description": "Server mode: stdio (local), http-no-auth (dev), http-auth (prod)",
-          "default": "stdio",
-          "choices": [
-            "stdio",
-            "http-no-auth",
-            "http-auth"
-          ]
+          "default": "stdio"
         },
         {
           "name": "SESSION_DIR",
-          "description": "Custom session directory (defaults to ~/.config/fast-mcp-telegram/)",
-          "is_required": false
+          "description": "Custom session directory (defaults to ~/.config/fast-mcp-telegram/)"
         }
       ]
     }
   ],
-  "version": "0.5.0"
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://tg-mcp.l1979.ru/v1/mcp"
+    }
+  ]
 }
