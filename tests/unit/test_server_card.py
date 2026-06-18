@@ -20,6 +20,8 @@ class _FakeTool:
         self.name = name
         self.description = description
         self.parameters = schema
+        self.output_schema = None
+        self.annotations = None
 
 
 @pytest.fixture()

@@ -98,9 +98,19 @@ def register_server_card_route(mcp_app: FastMCP) -> None:
                 },
                 "tools": [
                     {
-                        "name": t.name,
-                        "description": t.description or "",
-                        "inputSchema": t.parameters,
+                        k: v
+                        for k, v in {
+                            "name": t.name,
+                            "description": t.description or "",
+                            "inputSchema": t.parameters,
+                            "outputSchema": t.output_schema,
+                            "annotations": (
+                                t.annotations.model_dump(exclude_none=True)
+                                if t.annotations
+                                else None
+                            ),
+                        }.items()
+                        if v is not None
                     }
                     for t in tools
                 ],
