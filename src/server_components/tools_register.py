@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import functools
 import inspect
 import time
@@ -53,6 +55,14 @@ from src.tools.messages import (
     send_message_to_phone_impl,
 )
 from src.tools.mtproto import invoke_mtproto_impl
+from src.tools.return_types import (
+    ChatInfoResult,
+    FindChatsResult,
+    MtprotoResult,
+    SearchResult,
+    SendEditResult,
+    SendToPhoneResult,
+)
 from src.tools.search import search_messages_impl
 
 # Canonical absolute URL for Tools-Reference (appended to each MCP tool description).
@@ -224,7 +234,7 @@ def register_tools(mcp: FastMCP) -> None:
         public: PublicFilter = None,
         auto_expand_batches: AutoExpandBatches = 2,
         include_total_count: IncludeTotalCount = False,
-    ) -> dict[str, Any]:
+    ) -> SearchResult:
         """Global Telegram message search (full doc URL is in the MCP tool description)."""
         return await search_messages_impl(
             query=query,
@@ -259,7 +269,7 @@ def register_tools(mcp: FastMCP) -> None:
         max_date: MaxDate = None,
         auto_expand_batches: AutoExpandBatches = 2,
         include_total_count: IncludeTotalCount = False,
-    ) -> dict[str, Any]:
+    ) -> SearchResult:
         """Browse, search, fetch by ids, or load replies in one chat (full doc URL in tool description)."""
         return await search_messages_impl(
             query=query,
@@ -290,7 +300,7 @@ def register_tools(mcp: FastMCP) -> None:
         reply_to_id: ReplyToId = None,
         parse_mode: ParseMode = "auto",
         files: FilesListParam = None,
-    ) -> dict[str, Any]:
+    ) -> SendEditResult:
         """Send text or media to a chat (full doc URL in tool description)."""
         return await send_message_impl(chat_id, message, reply_to_id, parse_mode, files)
 
@@ -309,7 +319,7 @@ def register_tools(mcp: FastMCP) -> None:
         message_id: MessageIdInChat,
         message: MessageBody,
         parse_mode: ParseMode = "auto",
-    ) -> dict[str, Any]:
+    ) -> SendEditResult:
         """Edit an existing message (full doc URL in tool description)."""
         return await edit_message_impl(
             chat_id,
@@ -336,7 +346,7 @@ def register_tools(mcp: FastMCP) -> None:
         min_date: MinDate = None,
         max_date: MaxDate = None,
         folder: FilterParam = None,
-    ) -> dict[str, Any]:
+    ) -> FindChatsResult:
         """Find chats by query, folder, or activity dates (full doc URL in tool description)."""
         return await find_chats_impl(
             query, limit, chat_type, public, min_date, max_date, folder
@@ -354,7 +364,7 @@ def register_tools(mcp: FastMCP) -> None:
     @mcp_tool_with_restrictions("get_chat_info")
     async def get_chat_info(
         chat_id: ChatId, topics_limit: TopicsLimit = 20
-    ) -> dict[str, Any]:
+    ) -> ChatInfoResult:
         """Profile and metadata for one chat or user (full doc URL in tool description)."""
         return await get_chat_info_impl(chat_id, topics_limit=topics_limit)
 
@@ -376,7 +386,7 @@ def register_tools(mcp: FastMCP) -> None:
         reply_to_msg_id: ReplyToMsgId = None,
         parse_mode: ParseMode = "auto",
         files: FilesListParam = None,
-    ) -> dict[str, Any]:
+    ) -> SendToPhoneResult:
         """Send to a phone number with optional contact auto-create (full doc URL in tool description)."""
         return await send_message_to_phone_impl(
             phone_number=phone_number,
@@ -403,7 +413,7 @@ def register_tools(mcp: FastMCP) -> None:
         params_json: ParamsJson,
         allow_dangerous: AllowDangerous = False,
         resolve: ResolveEntities = True,
-    ) -> dict[str, Any]:
+    ) -> MtprotoResult:
         """Raw Telegram API invoke, advanced (full doc URL in tool description)."""
         return await invoke_mtproto_impl(
             method_full_name=method_full_name,
