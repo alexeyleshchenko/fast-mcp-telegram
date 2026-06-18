@@ -100,7 +100,7 @@ def register_server_card_route(mcp_app: FastMCP) -> None:
                     {
                         "name": t.name,
                         "description": t.description or "",
-                        "inputSchema": t.inputSchema,
+                        "inputSchema": t.parameters,
                     }
                     for t in tools
                 ],

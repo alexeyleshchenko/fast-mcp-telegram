@@ -19,7 +19,7 @@ class _FakeTool:
     def __init__(self, name: str, description: str, schema: dict):
         self.name = name
         self.description = description
-        self.inputSchema = schema
+        self.parameters = schema
 
 
 @pytest.fixture()
