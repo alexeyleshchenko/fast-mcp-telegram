@@ -1,0 +1,1169 @@
+{
+  "id": null,
+  "uid": "fmt-overview",
+  "title": "Telemetry Overview",
+  "tags": [
+    "fast-mcp-telegram",
+    "telemetry"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 5,
+  "refresh": "5m",
+  "time": {
+    "from": "now-30d",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "exclude_prod",
+        "type": "custom",
+        "label": "Production Instance",
+        "query": "Include All : 0, Exclude Production : 1",
+        "current": {
+          "text": "Include All",
+          "value": "0"
+        },
+        "options": [
+          {
+            "selected": true,
+            "text": "Include All",
+            "value": "0"
+          },
+          {
+            "selected": false,
+            "text": "Exclude Production",
+            "value": "1"
+          }
+        ],
+        "includeAll": false,
+        "multi": false
+      }
+    ]
+  },
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Overview",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Total Events",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 1
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "telemetry-pg"
+      },
+      "targets": [
+        {
+          "rawSql": "SELECT count(*) FROM telemetry WHERE ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%')",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Unique Instances",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 1
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "telemetry-pg"
+      },
+      "targets": [
+        {
+          "rawSql": "SELECT count(DISTINCT instance_id) FROM telemetry WHERE ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%')",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Active (24h)",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 1
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "telemetry-pg"
+      },
+      "targets": [
+        {
+          "rawSql": "SELECT count(DISTINCT instance_id) FROM telemetry WHERE received_at > now() - interval '24 hours' AND ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%')",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 5
+              },
+              {
+                "color": "green",
+                "value": 10
+              }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Latest Heartbeat",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 1
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "telemetry-pg"
+      },
+      "targets": [
+        {
+          "rawSql": "SELECT EXTRACT(EPOCH FROM now() - max(received_at))::int FROM telemetry WHERE ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%')",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 3600
+              },
+              {
+                "color": "red",
+                "value": 86400
+              }
+            ]
+          },
+          "unit": "s",
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 6,
+      "type": "row",
+      "title": "Distribution",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 5
+      }
+    },
+    {
+      "id": 7,
+      "type": "piechart",
+      "title": "OS",
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 0,
+        "y": 6
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "telemetry-pg"
+      },
+      "targets": [
+        {
+          "rawSql": "SELECT payload->>'os' AS metric, count(DISTINCT instance_id)::int AS value FROM telemetry WHERE ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%') GROUP BY 1 ORDER BY 2 DESC",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [],
+          "fields": "",
+          "values": true
+        },
+        "pieType": "donut",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value",
+            "percent"
+          ]
+        }
+      }
+    },
+    {
+      "id": 8,
+      "type": "piechart",
+      "title": "Mode",
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 6,
+        "y": 6
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "telemetry-pg"
+      },
+      "targets": [
+        {
+          "rawSql": "SELECT COALESCE(payload->'features'->>'server_mode', 'stdio') AS metric, count(DISTINCT instance_id)::int AS value FROM telemetry WHERE ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%') GROUP BY 1 ORDER BY 2 DESC",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [],
+          "fields": "",
+          "values": true
+        },
+        "pieType": "donut",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value",
+            "percent"
+          ]
+        }
+      }
+    },
+    {
+      "id": 9,
+      "type": "piechart",
+      "title": "Version",
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 12,
+        "y": 6
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "telemetry-pg"
+      },
+      "targets": [
+        {
+          "rawSql": "WITH latest AS (SELECT DISTINCT ON (instance_id) instance_id, payload->>'ver' AS version FROM telemetry WHERE ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%') ORDER BY instance_id, received_at DESC) SELECT version AS metric, count(*)::int AS value FROM latest GROUP BY 1 ORDER BY 2 DESC",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [],
+          "fields": "",
+          "values": true
+        },
+        "pieType": "donut",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value",
+            "percent"
+          ]
+        }
+      }
+    },
+    {
+      "id": 10,
+      "type": "piechart",
+      "title": "Python",
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 6
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "telemetry-pg"
+      },
+      "targets": [
+        {
+          "rawSql": "WITH latest AS (SELECT DISTINCT ON (instance_id) instance_id, payload->>'py' AS py FROM telemetry WHERE ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%') ORDER BY instance_id, received_at DESC) SELECT py AS metric, count(*)::int AS value FROM latest GROUP BY 1 ORDER BY 2 DESC",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [],
+          "fields": "",
+          "values": true
+        },
+        "pieType": "donut",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value",
+            "percent"
+          ]
+        }
+      }
+    },
+    {
+      "id": 11,
+      "type": "row",
+      "title": "Activity",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 14
+      }
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Daily Events",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 15
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "telemetry-pg"
+      },
+      "targets": [
+        {
+          "rawSql": "SELECT date_trunc('day', received_at) AS time, count(*) AS \"events\" FROM telemetry WHERE $__timeFilter(received_at) AND ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%') GROUP BY 1 ORDER BY 1",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      }
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Active Instances / Day",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 15
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "telemetry-pg"
+      },
+      "targets": [
+        {
+          "rawSql": "SELECT date_trunc('day', received_at) AS time, count(DISTINCT instance_id) AS \"instances\" FROM telemetry WHERE $__timeFilter(received_at) AND ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%') GROUP BY 1 ORDER BY 1",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      }
+    },
+    {
+      "id": 14,
+      "type": "row",
+      "title": "Tools",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 23
+      }
+    },
+    {
+      "id": 15,
+      "type": "barchart",
+      "title": "Tool Calls (all time)",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 24
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "telemetry-pg"
+      },
+      "targets": [
+        {
+          "rawSql": "SELECT key AS metric, sum((value->>'calls')::int) AS value FROM telemetry, jsonb_each(payload->'tools') WHERE jsonb_typeof(payload->'tools') = 'object' AND (value->>'calls')::int > 0 AND ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%') GROUP BY key ORDER BY value DESC",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "showValue": "auto",
+        "groupWidth": 0.7,
+        "barWidth": 0.9,
+        "stacking": "none",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        },
+        "xTickLabelRotation": 0,
+        "colorByField": ""
+      }
+    },
+    {
+      "id": 16,
+      "type": "table",
+      "title": "Tool Performance",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 24
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "telemetry-pg"
+      },
+      "targets": [
+        {
+          "rawSql": "SELECT key AS \"Tool\", sum((value->>'calls')::int) AS \"Calls\", sum((value->>'errors')::int) AS \"Errors\", CASE WHEN sum((value->>'calls')::int) > 0 THEN round(sum((value->>'errors')::int)::numeric / sum((value->>'calls')::int) * 100, 1) ELSE 0 END AS \"Error %\", CASE WHEN sum((value->>'calls')::int) > 0 THEN round(sum((value->>'avg_ms')::bigint * (value->>'calls')::int)::numeric / sum((value->>'calls')::int), 0) ELSE 0 END AS \"Avg ms\" FROM telemetry, jsonb_each(payload->'tools') WHERE jsonb_typeof(payload->'tools') = 'object' AND (value->>'calls')::int > 0 AND ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%') GROUP BY key ORDER BY \"Calls\" DESC",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": []
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Error %"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 10
+                    },
+                    {
+                      "color": "red",
+                      "value": 20
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Avg ms"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "sortBy": [
+          {
+            "displayName": "Calls",
+            "desc": true
+          }
+        ]
+      }
+    },
+    {
+      "id": 22,
+      "type": "row",
+      "title": "Paramsets",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 32
+      }
+    },
+    {
+      "id": 23,
+      "type": "table",
+      "title": "Paramset Breakdown",
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 33
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "telemetry-pg"
+      },
+      "targets": [
+        {
+          "rawSql": "SELECT tool_key AS \"Tool\", param_key AS \"Paramset\", SUM((param_value->>'calls')::int) AS \"Calls\", SUM((param_value->>'errors')::int) AS \"Errors\", CASE WHEN SUM((param_value->>'calls')::int) > 0 THEN ROUND(SUM((param_value->>'errors')::numeric) / SUM((param_value->>'calls')::int) * 100, 1) ELSE 0 END AS \"Error %\", CASE WHEN SUM((param_value->>'calls')::int) > 0 THEN ROUND(SUM((param_value->>'duration_ms')::float) / SUM((param_value->>'calls')::int))::int ELSE 0 END AS \"Avg ms\" FROM telemetry, jsonb_each(payload->'tools') AS t(tool_key, tool_value), jsonb_each(tool_value->'param_sets') AS p(param_key, param_value) WHERE jsonb_typeof(payload->'tools') = 'object' AND jsonb_typeof(tool_value->'param_sets') = 'object' AND ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%') AND payload->>'ver' >= '0.33.0' GROUP BY tool_key, param_key ORDER BY tool_key, \"Calls\" DESC",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": []
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Error %"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 10
+                    },
+                    {
+                      "color": "red",
+                      "value": 20
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Avg ms"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "sortBy": [
+          {
+            "displayName": "Calls",
+            "desc": true
+          }
+        ]
+      }
+    },
+    {
+      "id": 17,
+      "type": "row",
+      "title": "Features",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 43
+      }
+    },
+    {
+      "id": 18,
+      "type": "table",
+      "title": "Feature Adoption (latest payload per instance)",
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 44
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "telemetry-pg"
+      },
+      "targets": [
+        {
+          "rawSql": "WITH latest AS (SELECT DISTINCT ON (instance_id) instance_id, payload->'features' AS features FROM telemetry WHERE ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%') ORDER BY instance_id, received_at DESC) SELECT feature AS \"Feature\", count(*) FILTER (WHERE enabled) AS \"Enabled\", count(*) AS \"Total\" FROM latest, LATERAL (VALUES ('block_private_ips', (features->>'block_private_ips')::boolean), ('acl_enabled', (features->>'acl_enabled')::boolean), ('bot_api_token', (features->>'bot_api_token')::boolean), ('mtproto_proxy', (features->>'mtproto_proxy')::boolean), ('allow_http_urls', (features->>'allow_http_urls')::boolean), ('prefix_mcp_tools_with_account', (features->>'prefix_mcp_tools_with_account')::boolean)) AS t(feature, enabled) GROUP BY feature ORDER BY \"Enabled\" DESC",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": []
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Enabled"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 5
+                    },
+                    {
+                      "color": "green",
+                      "value": 10
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "sortBy": [
+          {
+            "displayName": "Enabled",
+            "desc": true
+          }
+        ]
+      }
+    },
+    {
+      "id": 19,
+      "type": "table",
+      "title": "Mode \u00d7 OS",
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 44
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "telemetry-pg"
+      },
+      "targets": [
+        {
+          "rawSql": "SELECT COALESCE(payload->'features'->>'server_mode', 'stdio') AS \"Mode\", payload->>'os' AS \"OS\", count(DISTINCT instance_id) AS \"Instances\" FROM telemetry WHERE ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%') GROUP BY 1, 2 ORDER BY \"Instances\" DESC",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "sortBy": [
+          {
+            "displayName": "Instances",
+            "desc": true
+          }
+        ]
+      }
+    },
+    {
+      "id": 20,
+      "type": "row",
+      "title": "Instances",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 51
+      }
+    },
+    {
+      "id": 21,
+      "type": "table",
+      "title": "All Instances (latest heartbeat)",
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 52
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "telemetry-pg"
+      },
+      "targets": [
+        {
+          "rawSql": "WITH latest AS (SELECT DISTINCT ON (instance_id) instance_id, received_at, payload FROM telemetry WHERE ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%') ORDER BY instance_id, received_at DESC) SELECT LEFT(instance_id, 8) AS \"Instance\", payload->>'ver' AS \"Version\", payload->>'os' AS \"OS\", payload->>'py' AS \"Python\", COALESCE(payload->'features'->>'server_mode', 'stdio') AS \"Mode\", (payload->'counters'->>'total_calls')::int AS \"Calls\", (payload->'counters'->>'errors')::int AS \"Errors\", (payload->'runtime'->>'sessions')::int AS \"Sessions\", (payload->'runtime'->>'session_files')::int AS \"Files\", to_char(received_at, 'YYYY-MM-DD HH24:MI') AS \"Last Seen\" FROM latest ORDER BY received_at DESC",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": []
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Errors"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 3
+                    },
+                    {
+                      "color": "red",
+                      "value": 10
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "sortBy": [
+          {
+            "displayName": "Last Seen",
+            "desc": true
+          }
+        ]
+      }
+    }
+  ]
+}
