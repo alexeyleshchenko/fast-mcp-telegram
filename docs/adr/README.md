@@ -22,3 +22,4 @@ Concise records of significant technical decisions for fast-mcp-telegram.
 | [0004](0004-qr-login-auth.md) | QR Login Auth — Simplified Self-Service Onboarding | accepted (2026-06-09, implemented v0.30.0) |
 | [0005](0005-anonymous-tool-telemetry.md) | Anonymous Tool Telemetry | accepted (2026-06-13) |
 | [0006](0006-abuse-prevention-for-collection-endpoint.md) | Abuse Prevention for the Open Collection Endpoint | proposed (2026-06-10) |
+| [0007](0007-qr-login-cli-setup.md) | QR Login in CLI Setup — QR-First Auth with Terminal Rendering | proposed (2026-06-18) |

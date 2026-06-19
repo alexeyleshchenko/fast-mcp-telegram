@@ -4,12 +4,20 @@ Simplified Telegram MCP server setup using unified ServerConfig.
 
 import asyncio
 import getpass
+import os
+import sys
+import tempfile
+import traceback
 from pathlib import Path
 
+import qrcode
 from pydantic import Field
 from pydantic_settings import CliImplicitFlag, SettingsConfigDict
 from telethon import TelegramClient
-from telethon.errors import SessionPasswordNeededError
+from telethon.errors import (
+    PasswordHashInvalidError,
+    SessionPasswordNeededError,
+)
 from telethon.tl.functions.account import GetPasswordRequest
 
 from src.client.connection import generate_bearer_token
@@ -18,6 +26,19 @@ from src.utils.logging_utils import mask_phone_number
 from .config.server_config import ServerConfig, ServerMode
 from .utils.mcp_config import generate_mcp_config_json
 from .utils.proxy import build_mtproto_client_args
+
+
+def _is_interactive_terminal() -> bool:
+    """Check if both stdin and stdout are interactive terminals."""
+    return sys.stdin.isatty() and sys.stdout.isatty()
+
+
+class QrScanFailedError(Exception):
+    """QR scan failed (timeout exhausted or recreate error)."""
+
+
+class QrScanNeeds2FAError(Exception):
+    """QR scan succeeded but account requires two-factor authentication."""
 
 
 class SetupConfig(ServerConfig):
@@ -62,12 +83,8 @@ class SetupConfig(ServerConfig):
                 "API Hash is required. Provide via --api-hash argument or API_HASH environment variable."
             )
 
-        # Either phone number (for user account) or bot token (for bot account) is required
-        if not self.bot_api_token and not self.phone_number:
-            raise ValueError(
-                "Either phone number (for user account) or bot token (for bot account) is required. "
-                "Provide via --phone-number or --bot-api-token argument, or corresponding environment variables."
-            )
+        # Auth method is inferred: QR (default), phone, or bot token.
+        # No phone or bot token required — QR login is the default.
 
         # Validate session name doesn't contain slashes (would break URL-based auth and file paths)
         if (
@@ -88,6 +105,170 @@ async def _print_2fa_password_hint(client: TelegramClient) -> None:
         print(f"2FA password hint: {hint}")
     else:
         print("2FA password hint: (not set in Telegram)")
+
+
+def _render_qr_terminal(url: str) -> bool:
+    """Render QR code in terminal. Returns True on success, False on failure."""
+    try:
+        qr = qrcode.QRCode(border=1)
+        qr.add_data(url)
+        qr.print_ascii(invert=True)
+        return True
+    except Exception:
+        return False
+
+
+def _cleanup_temp_session(temp_path: Path) -> None:
+    """Remove temp session file and sidecar files."""
+    for ext in ("", "-journal", "-wal"):
+        p = Path(f"{temp_path}.session{ext}")
+        p.unlink(missing_ok=True)
+
+
+def _finalize_temp_session_files(temp_filename: str | None, session_path: Path) -> None:
+    """Move temp session file and sidecars to final path. Call after client.disconnect()."""
+    if not temp_filename:
+        return
+    temp_base = Path(temp_filename).with_suffix("")
+    for ext in ("", "-journal", "-wal"):
+        src = Path(f"{temp_base}.session{ext}")
+        dst = Path(f"{session_path}.session{ext}")
+        if src.exists():
+            os.rename(str(src), str(dst))
+
+
+async def _wait_for_qr_scan(qr_login: object, max_retries: int = 5) -> None:
+    """Wait for QR scan with retry on timeout. Raises QrScanFailedError or QrScanNeeds2FAError."""
+    for attempt in range(max_retries):
+        try:
+            print(f"Waiting for scan... (attempt {attempt + 1})")
+            await qr_login.wait()
+            return
+        except TimeoutError:
+            if attempt >= max_retries - 1:
+                print("\n❌ QR code expired. Maximum retries reached.")
+                raise QrScanFailedError() from None
+            try:
+                qr_login = await qr_login.recreate()
+            except Exception as recreate_err:
+                print(f"\n❌ Failed to regenerate QR: {recreate_err}")
+                raise QrScanFailedError() from recreate_err
+            url = str(getattr(qr_login, "url", "")).strip()
+            print("\nQR expired. New code generated:")
+            _render_qr_terminal(url)
+            print(f"  Or open: {url}")
+        except SessionPasswordNeededError:
+            raise QrScanNeeds2FAError() from None
+
+
+async def _handle_qr_2fa(client: TelegramClient) -> bool:
+    """Handle 2FA password prompt after QR scan. Returns True on success."""
+    print("\nTwo-step verification is enabled for this account.")
+    await _print_2fa_password_hint(client)
+    for pwd_attempt in range(3):
+        password = getpass.getpass("Please enter your 2FA password: ")
+        try:
+            await client.sign_in(password=password)
+            return True
+        except PasswordHashInvalidError:
+            if pwd_attempt < 2:
+                print("❌ Wrong password. Try again.")
+            else:
+                print("❌ Too many wrong password attempts.")
+                return False
+    return False
+
+
+async def _qr_login_flow(
+    client: TelegramClient,
+    session_path: Path,
+) -> bool:
+    """Perform QR code login flow. Returns True on success, False on failure.
+
+    Uses temp SQLiteSession to avoid corrupting existing session files.
+    Disconnects client before renaming temp file (SQLite requires closed handles).
+    """
+    try:
+        qr_login = await client.qr_login()
+        url = str(getattr(qr_login, "url", "")).strip()
+        if not url:
+            print("❌ Telethon QR login did not return a valid URL")
+            return False
+
+        # Render QR in terminal (best-effort) + always print URL
+        rendered = _render_qr_terminal(url)
+        print("\nScan with Telegram: Settings → Devices → Link Desktop Device")
+        if not rendered:
+            print("(QR rendering failed — use the link below)")
+        print(f"  Or open: {url}")
+
+        # Wait for scan (with timeout retries)
+        try:
+            await _wait_for_qr_scan(qr_login)
+        except QrScanNeeds2FAError:
+            if not await _handle_qr_2fa(client):
+                return False
+        except QrScanFailedError:
+            return False
+
+        # Validate auth succeeded
+        me = await client.get_me()
+        if not me:
+            print("❌ Auth succeeded but get_me() failed")
+            return False
+
+        username = getattr(me, "username", None) or getattr(me, "first_name", None) or "user"
+        print(f"✓ Logged in as @{username}")
+
+    except Exception as exc:
+        traceback.print_exc()
+        print(f"❌ QR login failed due to an unexpected error: {exc}")
+        return False
+
+    # Capture session filename before disconnect (client.session may be cleared after disconnect)
+    temp_session_filename = getattr(client.session, "filename", None)
+
+    # Disconnect before renaming temp session (SQLite requires closed handles)
+    await client.disconnect()
+    _finalize_temp_session_files(temp_session_filename, session_path)
+
+    return True
+
+
+async def _qr_session_login(
+    setup_config: SetupConfig,
+    session_path: Path,
+    bearer_token: str | None,
+) -> tuple[Path, str | None] | None:
+    """Handle QR login with temp session lifecycle. Creates, connects, and cleans up on failure."""
+    session_dir = setup_config.session_directory
+
+    # mkstemp creates the file atomically (avoids TOCTOU race with mktemp)
+    fd, temp_path = tempfile.mkstemp(dir=str(session_dir))
+    os.close(fd)
+    os.unlink(temp_path)  # Telethon will create its own .session file at this base
+
+    client_kwargs = {
+        "session": temp_path,
+        "api_id": int(setup_config.api_id),
+        "api_hash": setup_config.api_hash,
+        "entity_cache_limit": setup_config.entity_cache_limit,
+        "receive_updates": True,
+    }
+    client_kwargs |= build_mtproto_client_args(setup_config.mtproto_proxy, print)
+
+    client = TelegramClient(**client_kwargs)
+    try:
+        await client.connect()
+        if not await _qr_login_flow(client, session_path):
+            await client.disconnect()
+            _cleanup_temp_session(Path(temp_path))
+            return None
+        return session_path, bearer_token
+    except Exception:
+        await client.disconnect()
+        _cleanup_temp_session(Path(temp_path))
+        raise
 
 
 async def setup_telegram_session(
@@ -121,9 +302,14 @@ async def setup_telegram_session(
     print("\nStarting Telegram session setup...")
     print(f"API ID: {setup_config.api_id}")
 
+    is_qr_flow = not setup_config.bot_api_token and not setup_config.phone_number
+
     if setup_config.bot_api_token:
         print("Bot token: [REDACTED]")
         print("Account type: Bot")
+    elif is_qr_flow:
+        print("Auth method: QR Code")
+        print("Account type: User")
     else:
         print(f"Phone: {mask_phone_number(setup_config.phone_number)}")
         print("Account type: User")
@@ -133,6 +319,12 @@ async def setup_telegram_session(
     actual_session_file = Path(f"{session_path!s}.session")
     print(f"Session will be saved to: {actual_session_file}")
     print(f"Session directory: {session_dir}")
+
+    # Non-TTY detection: QR needs terminal rendering (must be before input() calls)
+    if is_qr_flow and not _is_interactive_terminal():
+        print("❌ Non-interactive terminal detected. QR login requires a terminal.")
+        print("   Use --bot-api-token for CI/scripted setup.")
+        return None
 
     # Handle session file conflicts
     if actual_session_file.exists():
@@ -152,16 +344,17 @@ async def setup_telegram_session(
 
     print(f"\n🔐 Authenticating with session: {setup_config.session_name}")
 
-    # Create the client and connect
-    client_kwargs = {
-        "session": session_path,
-        "api_id": int(setup_config.api_id),
-        "api_hash": setup_config.api_hash,
-        "entity_cache_limit": setup_config.entity_cache_limit,
-    }
-    client_kwargs |= build_mtproto_client_args(setup_config.mtproto_proxy, print)
+    if is_qr_flow:
+        # QR login flow — delegated to _qr_session_login which manages temp session lifecycle
+        return await _qr_session_login(setup_config, session_path, bearer_token)
 
-    client = TelegramClient(**client_kwargs)
+    client = TelegramClient(
+        session=session_path,
+        api_id=int(setup_config.api_id),
+        api_hash=setup_config.api_hash,
+        entity_cache_limit=setup_config.entity_cache_limit,
+        **build_mtproto_client_args(setup_config.mtproto_proxy, print),
+    )
 
     try:
         await client.connect()
