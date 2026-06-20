@@ -103,6 +103,39 @@ class TestJsonSafeMtproto:
         assert out["document_id"] == "5314748207455037000"
         assert out["date"] == 1700000000
 
+    def test_json_safe_handles_list_of_int64s(self):
+        # JS-safe ints stay numeric; out-of-range int64 values are stringified
+        values = [
+            1,
+            9007199254740991,   # max JS-safe integer (2**53 - 1)
+            9007199254740992,   # first JS-unsafe integer (2**53)
+            5314748207455037000,
+        ]
+        out = _json_safe(values)
+        assert out[0] == 1
+        assert out[1] == 9007199254740991
+        assert out[2] == "9007199254740992"
+        assert out[3] == "5314748207455037000"
+
+    def test_json_safe_handles_nested_list_and_dict(self):
+        # Typical invoke_mtproto-style nested list/dict response
+        tl = [
+            {"_": "PeerUser", "user_id": 123456789},
+            5314748207455037000,
+            {
+                "_": "Message",
+                "id": 42,
+                "fwd_from": {"channel_id": 5314748207455037001},
+            },
+        ]
+        out = _json_safe(tl)
+        # JS-safe ids remain numeric
+        assert out[0]["user_id"] == 123456789
+        assert out[2]["id"] == 42
+        # Out-of-range int64 ids are stringified
+        assert out[1] == "5314748207455037000"
+        assert out[2]["fwd_from"]["channel_id"] == "5314748207455037001"
+
 
 class TestBuildEntityDict:
     def setup_method(self):
