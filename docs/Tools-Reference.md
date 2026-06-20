@@ -126,6 +126,17 @@ Also includes, when applicable:
 
 Counts are fetched via Telethon full-info requests and reflect current values.
 
+> **Large 64-bit ids are strings where precision would otherwise be lost.** To
+> survive double-based JSON consumers (browsers, JS, Claude Web), where any integer
+> above 2⁵³ loses its low digits (e.g. a custom-emoji `document_id`
+> `5366182128746793135` would be read back as `5366182128746793000`), two id surfaces
+> are serialized as JSON **strings**: `access_hash` in entity objects (it always
+> exceeds 2⁵³ and must round-trip verbatim to rebuild `InputPeer`), and any
+> out-of-range integer in `invoke_mtproto` results (including `document_id`) — small
+> values like offsets, flags and lengths stay numeric. All other id fields (`id`,
+> `message_id`, `reply_to_msg_id`, `topic_id`) remain numbers. Ids are accepted as
+> either strings or numbers on input.
+
 **Examples:**
 ```json
 // Get user details by ID

@@ -14,6 +14,7 @@ from src.client.connection import get_connected_client
 from src.utils.entity import get_entity_by_id, is_ambiguous_peer_scalar
 from src.utils.error_handling import log_and_build_error, log_connection_error_response
 from src.utils.helpers import normalize_method_name
+from src.utils.json_ids import stringify_int64
 
 logger = logging.getLogger(__name__)
 
@@ -148,8 +149,13 @@ def _json_safe(value: Any) -> Any:
     - ensure all strings are UTF-8 encodable (replace errors if needed)
     """
     try:
-        if value is None or isinstance(value, bool | int | float):
+        if value is None or isinstance(value, bool | float):
             return value
+        if isinstance(value, int):
+            # 64-bit Telegram ids (document_id, access_hash, peer ids, ...) lose
+            # precision when JSON-decoded as doubles; emit out-of-range ints as
+            # strings. Small ints (offsets, flags, lengths) stay numeric.
+            return stringify_int64(value)
         if isinstance(value, bytes):
             return base64.b64encode(value).decode("ascii")
         if isinstance(value, str):

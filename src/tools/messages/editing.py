@@ -67,7 +67,7 @@ async def edit_message_impl(
         )
 
         result = build_send_edit_result(edited_message, chat, "edited")
-        result.update(_extract_topic_metadata(edited_message))
+        result |= _extract_topic_metadata(edited_message)
 
         log_operation_success("Message edited", chat_id)
         return result

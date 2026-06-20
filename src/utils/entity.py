@@ -15,6 +15,7 @@ from telethon.tl.types import InputMessagesFilterEmpty, PeerChannel, PeerChat, P
 
 from ..client.connection import get_connected_client
 from .chat_search_text import chat_searchable_text_lower
+from .json_ids import id_to_str
 
 logger = logging.getLogger(__name__)
 
@@ -426,8 +427,9 @@ def build_entity_dict(entity) -> dict | None:
         "subscribers_count": subscribers_count,
         # Present only for forum-enabled channels/supergroups
         "is_forum": True if is_forum else None,
-        # Access hash (required for InputPeer construction)
-        "access_hash": getattr(entity, "access_hash", None),
+        # Access hash is a 64-bit id that always exceeds 2**53, so it is emitted
+        # as a string to survive JS/double JSON parsing (lossless round-trip).
+        "access_hash": id_to_str(getattr(entity, "access_hash", None)),
         # Min flag: since Layer 102, min entities have an access_hash
         # that only works for profile photo downloads, NOT for general API calls
         "min": getattr(entity, "min", None),

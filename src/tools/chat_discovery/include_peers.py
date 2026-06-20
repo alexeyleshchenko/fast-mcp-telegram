@@ -204,7 +204,14 @@ async def _find_chats_by_include_peers(
                 continue
             ent_type = ent.get("type")
             chunk_entities.append((pid, ent_type))
-            access_hash = ent.get("access_hash", 0) or 0
+            # access_hash is serialized as a string (JS int64 safety); coerce
+            # back to int for InputPeer* construction.  Guard against
+            # malformed / non-numeric strings so a corrupt entity dict
+            # cannot raise ValueError and crash chat discovery.
+            try:
+                access_hash = int(ent.get("access_hash") or 0)
+            except (ValueError, TypeError):
+                access_hash = 0
             is_min = ent.get("min", False)
             if ent_type == "channel":
                 if is_min or not access_hash:

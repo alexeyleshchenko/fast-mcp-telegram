@@ -520,6 +520,10 @@ def _extract_topic_metadata(message: Any) -> dict[str, Any]:
     forum_topic = bool(getattr(reply_to, "forum_topic", False))
     reply_to_top_id = getattr(reply_to, "reply_to_top_id", None)
     topic_id = reply_to_top_id or (reply_to_msg_id if forum_topic else None)
+    # Raw int here: this is an INTERNAL helper also consumed by the forum/thread
+    # search path (SearchRequest.top_msg_id, GetForumTopicsByIDRequest), which
+    # needs the int. Output stringification happens at the response boundary in
+    # build_message_result.
     return {"topic_id": topic_id} if topic_id is not None else {}
 
 
