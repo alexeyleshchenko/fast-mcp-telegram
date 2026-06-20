@@ -369,7 +369,8 @@ async def test_forum_in_topic_replies_hydrate_search_stubs():
         )
 
     assert len(collected) == 1
-    hydrated_call = build_mock.call_args_list[0][0][0]
+    args, _ = build_mock.call_args_list[0]
+    hydrated_call = args[0]
     assert hydrated_call.text == "hydrated reply"
 
 
