@@ -93,7 +93,6 @@ async def _collect_full_thread_messages(
         remaining = target - len(collected)
         collected.extend(
             await results._build_results_up_to_limit(
-                client,
                 messages,
                 entity,
                 include_chat_entity,
@@ -130,7 +129,7 @@ async def _fetch_direct_replies(
         if min_date and message.date and message.date < min_date:
             continue
         result = await results._build_result_for_message(
-            client, message, entity, include_chat_entity
+            message, entity, include_chat_entity
         )
         if not result:
             continue

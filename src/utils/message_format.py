@@ -524,7 +524,7 @@ def _extract_topic_metadata(message: Any) -> dict[str, Any]:
 
 
 async def build_message_result(
-    client, message, entity_or_chat, link: str | None, include_chat_entity: bool = False
+    message, entity_or_chat, link: str | None, include_chat_entity: bool = False
 ) -> dict[str, Any]:
     sender = await get_sender_info(message)
     chat = build_entity_dict(entity_or_chat)

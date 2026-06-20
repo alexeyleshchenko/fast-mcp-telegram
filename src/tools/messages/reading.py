@@ -60,7 +60,6 @@ def _find_message_by_id(messages: list, requested_id: int, idx: int):
 
 
 async def _build_message_results(
-    client,
     messages: list,
     message_ids: list[int],
     entity,
@@ -85,7 +84,7 @@ async def _build_message_results(
 
         link = id_to_link.get(getattr(msg, "id", requested_id))
         built = await build_message_result(
-            client, msg, entity, link, include_chat_entity=False
+            msg, entity, link, include_chat_entity=False
         )
         results.append(built)
 
@@ -149,7 +148,7 @@ async def read_messages_by_ids(
         chat_dict = build_entity_dict(entity) or {}
 
         results = await _build_message_results(
-            client, messages, message_ids, entity, id_to_link, chat_dict
+            messages, message_ids, entity, id_to_link, chat_dict
         )
 
         successful_results = [r for r in results if "error" not in r]

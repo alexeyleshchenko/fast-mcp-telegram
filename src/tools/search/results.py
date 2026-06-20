@@ -14,7 +14,6 @@ logger = logging.getLogger(__name__)
 
 
 async def _build_results_up_to_limit(
-    client,
     messages,
     chat_entity,
     include_chat_entity: bool,
@@ -25,7 +24,7 @@ async def _build_results_up_to_limit(
     target = limit + 1 if limit is not None else None
     for message in messages:
         built = await _build_result_for_message(
-            client, message, chat_entity, include_chat_entity
+            message, chat_entity, include_chat_entity
         )
         if not built:
             continue
@@ -36,7 +35,6 @@ async def _build_results_up_to_limit(
 
 
 async def _build_result_for_message(
-    client,
     message,
     chat_entity,
     include_chat_entity: bool = False,
@@ -60,7 +58,7 @@ async def _build_result_for_message(
         )
         link = links.get("message_links", [None])[0]
         return await build_message_result(
-            client, message, chat_entity, link, include_chat_entity
+            message, chat_entity, link, include_chat_entity
         )
     except Exception as e:
         logger.warning(f"Error processing message: {e}")

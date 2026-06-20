@@ -150,7 +150,7 @@ async def _process_raw_message(
             return None
 
         return await results._build_result_for_message(
-            client, message, chat, include_chat_entity
+            message, chat, include_chat_entity
         )
     except Exception as e:
         logger.warning(f"Error processing message: {e}")
