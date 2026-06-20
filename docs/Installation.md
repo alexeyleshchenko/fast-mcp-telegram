@@ -17,7 +17,15 @@ Fast MCP Telegram runs in two modes:
 
 **Step 1 — Authenticate (choose one)**
 
-**Option A: Phone number (full Telegram user access)**
+**Option A: QR code (recommended — no phone, no OTP)**
+```bash
+uvx --from fast-mcp-telegram fast-mcp-telegram-setup \
+  --api-id="your_api_id" \
+  --api-hash="your_api_hash"
+```
+A QR code appears in your terminal. Open Telegram mobile → Settings → Devices → Link Desktop Device → scan. If the account has 2FA, you'll be prompted for the password. Works over SSH.
+
+**Option B: Phone number**
 ```bash
 uvx --from fast-mcp-telegram fast-mcp-telegram-setup \
   --api-id="your_api_id" \
@@ -25,7 +33,7 @@ uvx --from fast-mcp-telegram fast-mcp-telegram-setup \
   --phone-number="+1234567890"
 ```
 
-**Option B: Bot token (simpler, no phone, no OTP)**
+**Option C: Bot token (no phone, no OTP)**
 Create a bot via [@BotFather](https://t.me/BotFather), then:
 ```bash
 uvx --from fast-mcp-telegram fast-mcp-telegram-setup \
