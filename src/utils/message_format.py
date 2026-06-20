@@ -18,7 +18,6 @@ from src.utils.entity import (
     _extract_forward_info,
     _forward_peer_id_and_type_label,
     build_entity_dict,
-    get_entity_by_id,
 )
 
 logger = logging.getLogger(__name__)
@@ -303,7 +302,7 @@ def build_send_edit_result(message, chat, status: str) -> dict[str, Any]:
 async def get_sender_info(client, message) -> dict[str, Any] | None:
     if hasattr(message, "sender_id") and message.sender_id:
         try:
-            sender = await get_entity_by_id(message.sender_id)
+            sender = await message.get_sender()
             if sender:
                 return build_entity_dict(sender)
             return {"id": message.sender_id, "error": "Sender not found"}
