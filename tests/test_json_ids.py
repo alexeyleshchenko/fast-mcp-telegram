@@ -155,3 +155,17 @@ class TestBuildEntityDict:
         assert isinstance(result["id"], int)
         assert result["access_hash"] == "9007199254740993"
         assert isinstance(result["access_hash"], str)
+
+    def test_no_access_hash_attribute(self):
+        """Entity without access_hash attribute → field omitted from dict."""
+        entity = SimpleNamespace(id=12345, title="NoHash")
+        result = build_entity_dict(entity)
+        assert "access_hash" not in result
+        assert result["id"] == 12345
+
+    def test_access_hash_is_none(self):
+        """Entity with access_hash=None → field omitted (not string 'None')."""
+        entity = SimpleNamespace(id=12345, access_hash=None, title="NullHash")
+        result = build_entity_dict(entity)
+        assert "access_hash" not in result
+        assert result["id"] == 12345

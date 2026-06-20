@@ -134,7 +134,7 @@ Counts are fetched via Telethon full-info requests and reflect current values.
 > exceeds 2⁵³ and must round-trip verbatim to rebuild `InputPeer`), and any
 > out-of-range integer in `invoke_mtproto` results (including `document_id`) — small
 > values like offsets, flags and lengths stay numeric. All other id fields (`id`,
-> `message_id`, `reply_to_msg_id`, `topic_id`) remain numbers. Ids are accepted as
+> `message_id`, `reply_to_msg_id`, `topic_id`) remain numbers. ids are accepted as
 > either strings or numbers on input.
 
 **Examples:**
