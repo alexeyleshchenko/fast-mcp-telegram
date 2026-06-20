@@ -18,7 +18,6 @@ from src.utils.entity import (
     _extract_forward_info,
     _forward_peer_id_and_type_label,
     build_entity_dict,
-    get_entity_by_id,
 )
 
 logger = logging.getLogger(__name__)
@@ -300,10 +299,15 @@ def build_send_edit_result(message, chat, status: str) -> dict[str, Any]:
     return result
 
 
-async def get_sender_info(client, message) -> dict[str, Any] | None:
+async def get_sender_info(message) -> dict[str, Any] | None:
+    """Build sender entity dict from a Telethon message.
+
+    Uses ``message.get_sender()`` which returns the sender cached by
+    ``iter_messages`` — no extra Telegram API call in the common case.
+    """
     if hasattr(message, "sender_id") and message.sender_id:
         try:
-            sender = await get_entity_by_id(message.sender_id)
+            sender = await message.get_sender()
             if sender:
                 return build_entity_dict(sender)
             return {"id": message.sender_id, "error": "Sender not found"}
@@ -522,7 +526,7 @@ def _extract_topic_metadata(message: Any) -> dict[str, Any]:
 async def build_message_result(
     client, message, entity_or_chat, link: str | None, include_chat_entity: bool = False
 ) -> dict[str, Any]:
-    sender = await get_sender_info(client, message)
+    sender = await get_sender_info(message)
     chat = build_entity_dict(entity_or_chat)
     forward_info = await _extract_forward_info(message)
 
