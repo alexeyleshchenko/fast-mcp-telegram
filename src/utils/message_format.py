@@ -299,7 +299,14 @@ def build_send_edit_result(message, chat, status: str) -> dict[str, Any]:
     return result
 
 
-async def get_sender_info(client, message) -> dict[str, Any] | None:
+async def get_sender_info(message) -> dict[str, Any] | None:
+    """Build sender entity dict from a Telethon message.
+
+    Uses ``message.get_sender()`` which returns the sender cached by
+    ``iter_messages`` — no extra Telegram API call.  Falls back to a
+    network ``get_entity`` only when the message was *not* obtained via
+    ``iter_messages`` (e.g. manually constructed Message objects).
+    """
     if hasattr(message, "sender_id") and message.sender_id:
         try:
             sender = await message.get_sender()
@@ -521,7 +528,7 @@ def _extract_topic_metadata(message: Any) -> dict[str, Any]:
 async def build_message_result(
     client, message, entity_or_chat, link: str | None, include_chat_entity: bool = False
 ) -> dict[str, Any]:
-    sender = await get_sender_info(client, message)
+    sender = await get_sender_info(message)
     chat = build_entity_dict(entity_or_chat)
     forward_info = await _extract_forward_info(message)
 
