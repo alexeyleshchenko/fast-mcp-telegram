@@ -303,9 +303,7 @@ async def get_sender_info(message) -> dict[str, Any] | None:
     """Build sender entity dict from a Telethon message.
 
     Uses ``message.get_sender()`` which returns the sender cached by
-    ``iter_messages`` — no extra Telegram API call.  Falls back to a
-    network ``get_entity`` only when the message was *not* obtained via
-    ``iter_messages`` (e.g. manually constructed Message objects).
+    ``iter_messages`` — no extra Telegram API call in the common case.
     """
     if hasattr(message, "sender_id") and message.sender_id:
         try:
