@@ -37,8 +37,11 @@ async def _build_input_peer(pid: int, ent_dict: dict) -> Any | None:
     """Build InputPeer* from entity dict. Returns None if type is unknown."""
     ent_type = ent_dict.get("type")
     # access_hash is serialized as a string in entity dicts (JS int64 safety);
-    # InputPeer* needs the raw int back.
-    access_hash = int(ent_dict.get("access_hash") or 0)
+    # InputPeer* needs the raw int back.  Guard against malformed strings.
+    try:
+        access_hash = int(ent_dict.get("access_hash") or 0)
+    except (ValueError, TypeError):
+        access_hash = 0
     if ent_type == "channel":
         return InputPeerChannel(channel_id=pid, access_hash=access_hash)
     if ent_type == "group":

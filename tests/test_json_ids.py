@@ -142,10 +142,6 @@ class TestBuildEntityDict:
         _ENTITY_DICT_CACHE.clear()
         _ENTITY_TYPE_CACHE.clear()
 
-    def _channel(self, **kwargs):
-        # A class literally named "Channel" so get_normalized_chat_type resolves it.
-        return type("Channel", (), {})(), kwargs
-
     def test_access_hash_is_string_id_is_numeric(self):
         entity = SimpleNamespace(
             id=5314748207455037000,
