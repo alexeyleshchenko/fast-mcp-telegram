@@ -477,7 +477,7 @@ class TestBuildMessageResultExcludeChat:
             new=AsyncMock(return_value={"id": 789, "name": "Sender"}),
         ):
             result = await build_message_result(
-                client, msg, entity, link="https://t.me/testchat/123", include_chat_entity=False
+                msg, entity, link="https://t.me/testchat/123", include_chat_entity=False
             )
 
         assert "chat" not in result, f"Expected no 'chat' field, got {result.keys()}"
@@ -513,7 +513,7 @@ class TestBuildMessageResultExcludeChat:
             new=AsyncMock(return_value={"id": 789, "name": "Sender"}),
         ):
             result = await build_message_result(
-                client, msg, entity, link="https://t.me/testchat/123", include_chat_entity=True
+                msg, entity, link="https://t.me/testchat/123", include_chat_entity=True
             )
 
         assert "chat" in result, f"Expected 'chat' field, got {result.keys()}"
@@ -548,7 +548,7 @@ class TestBuildMessageResultExcludeChat:
             new=AsyncMock(return_value={"id": 789, "name": "Sender"}),
         ):
             result = await build_message_result(
-                client, msg, entity, link="https://t.me/testchat/123"
+                msg, entity, link="https://t.me/testchat/123"
             )
 
         assert "chat" not in result, f"Expected no 'chat' field by default, got {result.keys()}"
@@ -581,14 +581,12 @@ class TestBuildMessageResultServicePlaceholder:
         entity.username = "testchat"
         entity.type = "chat"
 
-        client = AsyncMock()
-
         with patch(
             "src.utils.message_format.get_sender_info",
             new=AsyncMock(return_value={"id": 789, "name": "Sender"}),
         ):
             result = await build_message_result(
-                client, msg, entity, link=None, include_chat_entity=False
+                msg, entity, link=None, include_chat_entity=False
             )
 
         assert result["text"] == "[Service: PinMessage]"

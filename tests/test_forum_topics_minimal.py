@@ -37,7 +37,7 @@ async def test_build_message_result_includes_topic_fields_for_forum_chat():
             new=AsyncMock(return_value=None),
         ),
     ):
-        result = await build_message_result(None, message, entity, None)
+        result = await build_message_result(message, entity, None)
 
     assert result["topic_id"] == 51
 
@@ -63,7 +63,7 @@ async def test_build_message_result_topic_fallback_to_message_reply_to_msg_id():
             new=AsyncMock(return_value=None),
         ),
     ):
-        result = await build_message_result(None, message, entity, None)
+        result = await build_message_result(message, entity, None)
 
     assert result["topic_id"] == 42
 
@@ -90,7 +90,7 @@ async def test_build_message_result_topic_fallback_to_reply_object_reply_to_msg_
             new=AsyncMock(return_value=None),
         ),
     ):
-        result = await build_message_result(None, message, entity, None)
+        result = await build_message_result(message, entity, None)
 
     assert result["topic_id"] == 99
 
@@ -117,7 +117,7 @@ async def test_build_message_result_omits_topic_fields_when_forum_topic_has_no_i
             new=AsyncMock(return_value=None),
         ),
     ):
-        result = await build_message_result(None, message, entity, None)
+        result = await build_message_result(message, entity, None)
 
     assert "topic_id" not in result
 
@@ -143,7 +143,7 @@ async def test_build_message_result_omits_topic_fields_for_non_forum_chat():
             new=AsyncMock(return_value=None),
         ),
     ):
-        result = await build_message_result(None, message, entity, None)
+        result = await build_message_result(message, entity, None)
 
     assert "topic_id" not in result
 

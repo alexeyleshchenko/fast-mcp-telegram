@@ -54,7 +54,7 @@ async def _search_chat_messages_generator(
                 continue
 
             result = await results._build_result_for_message(
-                client, message, entity, include_chat_entity
+                message, entity, include_chat_entity
             )
             if not result:
                 continue
@@ -118,7 +118,7 @@ async def _search_global_messages_generator(
                     continue
 
                 msg_result = await results._build_result_for_message(
-                    client, message, chat, include_chat_entity
+                    message, chat, include_chat_entity
                 )
                 if not msg_result:
                     continue

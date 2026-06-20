@@ -355,7 +355,7 @@ async def _collect_forum_anchor_replies(
     collected: list[dict[str, Any]] = []
     for stub in matched:
         built = await results._build_result_for_message(
-            client, by_id.get(stub.id, stub), entity, include_chat_entity
+            by_id.get(stub.id, stub), entity, include_chat_entity
         )
         if built:
             collected.append(built)
