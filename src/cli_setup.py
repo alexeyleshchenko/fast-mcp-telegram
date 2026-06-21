@@ -7,6 +7,7 @@ import getpass
 import os
 import sys
 import tempfile
+import time
 import traceback
 from pathlib import Path
 
@@ -21,11 +22,25 @@ from telethon.errors import (
 from telethon.tl.functions.account import GetPasswordRequest
 
 from src.client.connection import generate_bearer_token
+from src.telemetry import send_auth_event
 from src.utils.logging_utils import mask_phone_number
 
 from .config.server_config import ServerConfig, ServerMode
 from .utils.mcp_config import generate_mcp_config_json
 from .utils.proxy import build_mtproto_client_args
+
+
+def _categorize_cli_error(exc: Exception) -> str:
+    """Categorize a Telethon exception into an auth error string."""
+    from telethon.errors import PhoneNumberFloodError
+
+    if isinstance(exc, PhoneNumberFloodError):
+        return "flood_wait"
+    if isinstance(exc, ConnectionError):
+        return "connect_failed"
+    if isinstance(exc, (TimeoutError, OSError)):
+        return "timeout"
+    return "unknown"
 
 
 def _is_interactive_terminal() -> bool:
@@ -169,12 +184,25 @@ async def _handle_qr_2fa(client: TelegramClient) -> bool:
         password = getpass.getpass("Please enter your 2FA password: ")
         try:
             await client.sign_in(password=password)
+            send_auth_event(
+                event="auth_completed",
+                method="cli_setup",
+                branch="cli_qr_2fa",
+                duration_ms=0.0,
+            )
             return True
         except PasswordHashInvalidError:
             if pwd_attempt < 2:
                 print("❌ Wrong password. Try again.")
             else:
                 print("❌ Too many wrong password attempts.")
+                send_auth_event(
+                    event="auth_failed",
+                    method="cli_setup",
+                    branch="cli_qr_2fa",
+                    duration_ms=0.0,
+                    error="2fa_wrong_password",
+                )
                 return False
     return False
 
@@ -217,7 +245,9 @@ async def _qr_login_flow(
             print("❌ Auth succeeded but get_me() failed")
             return False
 
-        username = getattr(me, "username", None) or getattr(me, "first_name", None) or "user"
+        username = (
+            getattr(me, "username", None) or getattr(me, "first_name", None) or "user"
+        )
         print(f"✓ Logged in as @{username}")
 
     except Exception as exc:
@@ -242,6 +272,14 @@ async def _qr_session_login(
 ) -> tuple[Path, str | None] | None:
     """Handle QR login with temp session lifecycle. Creates, connects, and cleans up on failure."""
     session_dir = setup_config.session_directory
+    start_time = time.monotonic()
+
+    send_auth_event(
+        event="auth_started",
+        method="cli_setup",
+        branch="cli_qr_scan",
+        duration_ms=0.0,
+    )
 
     # mkstemp creates the file atomically (avoids TOCTOU race with mktemp)
     fd, temp_path = tempfile.mkstemp(dir=str(session_dir))
@@ -263,11 +301,34 @@ async def _qr_session_login(
         if not await _qr_login_flow(client, session_path):
             await client.disconnect()
             _cleanup_temp_session(Path(temp_path))
+            elapsed = (time.monotonic() - start_time) * 1000
+            send_auth_event(
+                event="auth_failed",
+                method="cli_setup",
+                branch="cli_qr_scan",
+                duration_ms=elapsed,
+                error="timeout",
+            )
             return None
+        elapsed = (time.monotonic() - start_time) * 1000
+        send_auth_event(
+            event="auth_completed",
+            method="cli_setup",
+            branch="cli_qr_scan",
+            duration_ms=elapsed,
+        )
         return session_path, bearer_token
     except Exception:
+        elapsed = (time.monotonic() - start_time) * 1000
         await client.disconnect()
         _cleanup_temp_session(Path(temp_path))
+        send_auth_event(
+            event="auth_failed",
+            method="cli_setup",
+            branch="cli_qr_scan",
+            duration_ms=elapsed,
+            error="connect_failed",
+        )
         raise
 
 
@@ -348,6 +409,15 @@ async def setup_telegram_session(
         # QR login flow — delegated to _qr_session_login which manages temp session lifecycle
         return await _qr_session_login(setup_config, session_path, bearer_token)
 
+    start_time = time.monotonic()
+    auth_branch = "cli_bot_token" if setup_config.bot_api_token else "cli_phone_code"
+    send_auth_event(
+        event="auth_started",
+        method="cli_setup",
+        branch=auth_branch,
+        duration_ms=0.0,
+    )
+
     client = TelegramClient(
         session=session_path,
         api_id=int(setup_config.api_id),
@@ -356,6 +426,8 @@ async def setup_telegram_session(
         **build_mtproto_client_args(setup_config.mtproto_proxy, print),
     )
 
+    auth_succeeded = False
+    auth_error: str | None = None
     try:
         await client.connect()
 
@@ -388,7 +460,11 @@ async def setup_telegram_session(
                     print("\nTwo-step verification is enabled for this account.")
                     await _print_2fa_password_hint(client)
                     password = getpass.getpass("Please enter your 2FA password: ")
-                    await client.sign_in(password=password)
+                    try:
+                        await client.sign_in(password=password)
+                    except PasswordHashInvalidError:
+                        auth_error = "2fa_wrong_password"
+                        raise
 
             print("Successfully authenticated!")
 
@@ -397,8 +473,35 @@ async def setup_telegram_session(
                 print(f"Successfully connected! Found chat: {dialog.name}")
                 break
 
+        auth_succeeded = True
+
+    except PasswordHashInvalidError:
+        if auth_error is None:
+            auth_error = "2fa_wrong_password"
+        raise
+    except Exception as exc:
+        if auth_error is None:
+            auth_error = _categorize_cli_error(exc)
+        raise
+
     finally:
+        elapsed = (time.monotonic() - start_time) * 1000
         await client.disconnect()
+        if auth_succeeded:
+            send_auth_event(
+                event="auth_completed",
+                method="cli_setup",
+                branch=auth_branch,
+                duration_ms=elapsed,
+            )
+        else:
+            send_auth_event(
+                event="auth_failed",
+                method="cli_setup",
+                branch=auth_branch,
+                duration_ms=elapsed,
+                error=auth_error or "unknown",
+            )
 
     return session_path, bearer_token
 

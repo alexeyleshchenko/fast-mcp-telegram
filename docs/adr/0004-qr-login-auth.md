@@ -192,3 +192,4 @@ The `feature/oidc-phase1-storage` branch is archived. No migration needed — th
 - [MCP Elicitation Specification](https://spec.modelcontextprotocol.io/specification/2025-03-26/basic/elicitation-considerations/)
 - [MCP Streamable HTTP — 2025-11-25 (with session management)](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports)
 - [SEP-2567: Sessionless MCP via Explicit State Handles](https://github.com/modelcontextprotocol/specification/discussions/163)
+- [ADR 0008](0008-auth-telemetry-events.md) — Auth telemetry events (QR login flows instrumented for failure/abandon detection)

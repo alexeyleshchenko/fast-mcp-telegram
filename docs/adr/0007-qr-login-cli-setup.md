@@ -150,3 +150,4 @@ Dropped. `StringSession` cannot persist to `.session` SQLite file — formats ar
 - [QrLoginManager](../../src/server_components/qr_login.py) — existing QR login module (web only, not used by CLI)
 - [cli_setup.py](../../src/cli_setup.py) — current CLI setup
 - [overpod/mcp-telegram](https://glama.ai/mcp/servers/mcp-telegram/mcp-telegram) — competitor's QR-only CLI approach
+- [ADR 0008](0008-auth-telemetry-events.md) — Auth telemetry events (CLI setup flows instrumented for failure/abandon detection)

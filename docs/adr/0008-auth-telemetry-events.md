@@ -1,13 +1,13 @@
 # ADR 0008: Auth Telemetry Events
 
-**Status:** proposed
+**Status:** accepted
 **Date:** 2026-06-19
 
 ## Context
 
 ### Problem
 
-Users authenticate through the web setup flow (phone+code, QR scan, 2FA, reauthorize), but the maintainer has zero visibility into whether these flows succeed, fail, or stall. The existing heartbeat telemetry (ADR 0005) aggregates tool-call metrics over 6-hour windows — useful for feature adoption trends, but completely blind to individual auth attempts.
+Users authenticate through the web setup flow (phone+code, QR scan, 2FA, reauthorize) or the CLI setup flow (QR, phone, bot token), but the maintainer has zero visibility into whether these flows succeed, fail, or stall. The existing heartbeat telemetry (ADR 0005) aggregates tool-call metrics over 6-hour windows — useful for feature adoption trends, but completely blind to individual auth attempts.
 
 Specific problems to detect:
 1. **Exceptions** — Telethon errors, network failures, unexpected crashes during auth
@@ -62,7 +62,7 @@ Add a new `type` field to the telemetry payload. The existing heartbeat payload 
 | `ts` | `int` | Unix timestamp when the event was recorded |
 | `ver` | `str` | Library version (same as heartbeat) |
 | `event` | `str` | What happened: `auth_started`, `auth_completed`, `auth_failed`, `auth_abandoned` |
-| `method` | `str` | Auth method: `phone`, `qr`, `reauth`, `bearer_check` |
+| `method` | `str` | Auth method: `phone`, `qr`, `reauth`, `bearer_check`, `cli_setup` |
 | `branch` | `str` | Code path / step: `phone_code`, `phone_2fa`, `qr_scan`, `qr_2fa`, `reauth_phone`, `bearer_valid`, `bearer_no_session`, `bearer_invalid` |
 | `duration_ms` | `float` | Wall-clock duration from start to this event |
 | `error` | `str \| null` | Categorized error: `flood_wait`, `invalid_code`, `2fa_wrong_password`, `timeout`, `connect_failed`, `session_expired`, `unknown` |
@@ -88,6 +88,11 @@ Add a new `type` field to the telemetry payload. The existing heartbeat payload 
 | `bearer_valid` | Bearer token validated successfully |
 | `bearer_no_session` | Bearer token valid but no session file |
 | `bearer_invalid` | Bearer token format invalid |
+| `cli_qr_scan` | CLI: QR code displayed, waiting for scan |
+| `cli_qr_2fa` | CLI: QR scanned, 2FA required |
+| `cli_phone_code` | CLI: Phone entered, code sent |
+| `cli_phone_2fa` | CLI: Code verified, 2FA required |
+| `cli_bot_token` | CLI: Bot token authentication |
 
 ### Error categories
 
@@ -109,7 +114,7 @@ Same endpoint (`/v1/event`), same HTTP POST, same fire-and-forget pattern. The c
 
 ### Collector changes
 
-1. **`collector/app/models.py`** — add `AuthEvent` dataclass with validation
+1. **`collector/app/auth_models.py`** — add `AuthEvent` dataclass with validation
 2. **`collector/app/services.py`** — `process_event()` dispatches on `type` field
 3. **`collector/app/main.py`** — no change (same endpoint)
 4. **`collector/app/database.py`** — same table (JSONB stores both event types), add index on `payload->>'type'`
@@ -162,6 +167,10 @@ GROUP BY payload->>'ver', payload->>'error';
 | `web_setup.py` | `/setup/reauthorize` | `auth_started(method=reauth, branch=reauth_phone)`, `auth_completed(method=reauth, branch=reauth_phone)` |
 | `web_setup.py` | `cleanup_stale_setup_sessions` | `auth_abandoned(method=..., branch=...)` |
 | `auth.py` | `require_auth` | `auth_completed(method=bearer_check, branch=bearer_valid)`, `auth_failed(method=bearer_check, branch=bearer_no_session)`, `auth_failed(method=bearer_check, branch=bearer_invalid)` |
+| `cli_setup.py` | `_qr_session_login` | `auth_started(method=cli_setup, branch=cli_qr_scan)`, `auth_completed(method=cli_setup, branch=cli_qr_scan)`, `auth_failed(method=cli_setup, branch=cli_qr_scan, error=timeout)` |
+| `cli_setup.py` | `_handle_qr_2fa` | `auth_completed(method=cli_setup, branch=cli_qr_2fa)`, `auth_failed(method=cli_setup, branch=cli_qr_2fa, error=2fa_wrong_password)` |
+| `cli_setup.py` | `setup_telegram_session` (phone) | `auth_started(method=cli_setup, branch=cli_phone_code)`, `auth_completed(method=cli_setup, branch=cli_phone_code)`, `auth_failed(method=cli_setup, branch=cli_phone_code, error=...)` |
+| `cli_setup.py` | `setup_telegram_session` (bot) | `auth_started(method=cli_setup, branch=cli_bot_token)`, `auth_completed(method=cli_setup, branch=cli_bot_token)`, `auth_failed(method=cli_setup, branch=cli_bot_token, error=...)` |
 
 ### Bearer check telemetry
 

@@ -375,10 +375,12 @@ def send_auth_event(
     Args:
         event: What happened — ``auth_started``, ``auth_completed``,
             ``auth_failed``, or ``auth_abandoned``.
-        method: Auth method — ``phone``, ``qr``, ``reauth``, ``bearer_check``.
+        method: Auth method — ``phone``, ``qr``, ``reauth``, ``bearer_check``, ``cli_setup``.
         branch: Code path — ``phone_code``, ``phone_2fa``, ``qr_scan``,
             ``qr_2fa``, ``reauth_phone``, ``bearer_valid``,
-            ``bearer_no_session``, ``bearer_invalid``.
+            ``bearer_no_session``, ``bearer_invalid``,
+            ``cli_qr_scan``, ``cli_qr_2fa``, ``cli_phone_code``,
+            ``cli_phone_2fa``, ``cli_bot_token``.
         duration_ms: Wall-clock duration from start to this event.
         error: Categorized error (``flood_wait``, ``invalid_code``, etc.)
             or ``None`` for success/started events.
@@ -407,14 +409,14 @@ def send_auth_event(
     import urllib.error
     import urllib.request
 
-    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    req = urllib.request.Request(
-        TELEMETRY_ENDPOINT,
-        data=body,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
     try:
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        req = urllib.request.Request(
+            TELEMETRY_ENDPOINT,
+            data=body,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
         urllib.request.urlopen(req, timeout=10)
     except urllib.error.HTTPError as exc:
         logger.debug(
@@ -422,6 +424,8 @@ def send_auth_event(
         )
     except (OSError, urllib.error.URLError) as exc:
         logger.debug("Telemetry auth event: network error — %s", exc)
+    except Exception:
+        logger.debug("Telemetry auth event: unexpected error", exc_info=True)
 
 
 # ---------------------------------------------------------------------------

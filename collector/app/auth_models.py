@@ -18,7 +18,7 @@ _VALID_EVENTS = frozenset(
 )
 
 # Valid auth methods
-_VALID_METHODS = frozenset({"phone", "qr", "reauth", "bearer_check"})
+_VALID_METHODS = frozenset({"phone", "qr", "reauth", "bearer_check", "cli_setup"})
 
 # Valid branch tags
 _VALID_BRANCHES = frozenset(
@@ -31,6 +31,11 @@ _VALID_BRANCHES = frozenset(
         "bearer_valid",
         "bearer_no_session",
         "bearer_invalid",
+        "cli_qr_scan",
+        "cli_qr_2fa",
+        "cli_phone_code",
+        "cli_phone_2fa",
+        "cli_bot_token",
     }
 )
 

@@ -1,5 +1,6 @@
 import contextlib
 import logging
+import time
 import warnings
 from collections.abc import Callable
 from functools import wraps
@@ -16,6 +17,34 @@ from src.server_components.session_token_validation import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Bearer check telemetry cooldown: {token_prefix: last_fire_epoch}
+# Fires at most once per token per hour to avoid flooding on every tool call.
+_BEARER_CHECK_COOLDOWN: dict[str, float] = {}
+_BEARER_COOLDOWN_SECONDS = 3600.0  # 1 hour
+
+
+def _fire_bearer_telemetry(event: str, branch: str, error: str | None = None) -> None:
+    """Fire bearer check telemetry event with cooldown.
+
+    Uses token prefix as cooldown key — fires at most once per token per hour.
+    """
+    from src.telemetry import send_auth_event
+
+    now = time.monotonic()
+    # Use branch+error as the cooldown key (not token — don't store secrets)
+    key = branch
+    last = _BEARER_CHECK_COOLDOWN.get(key, 0.0)
+    if now - last < _BEARER_COOLDOWN_SECONDS:
+        return
+    _BEARER_CHECK_COOLDOWN[key] = now
+    send_auth_event(
+        event=event,
+        method="bearer_check",
+        branch=branch,
+        duration_ms=0.0,
+        error=error,
+    )
 
 
 class AuthenticationError(Exception):
@@ -117,7 +146,9 @@ def require_auth(func: Callable) -> Callable:
             except ToolError:
                 raise
             except Exception:
-                logger.debug("FastMCP get_access_token fallback unavailable", exc_info=True)
+                logger.debug(
+                    "FastMCP get_access_token fallback unavailable", exc_info=True
+                )
 
         if token is None:
             logger.info("Unauthenticated tool call — returning auth guidance")
@@ -128,6 +159,7 @@ def require_auth(func: Callable) -> Callable:
             validated = validate_session_token(token)
         except InvalidSessionTokenError:
             logger.warning("Invalid token format in tool call")
+            _fire_bearer_telemetry("auth_failed", "bearer_invalid", "unknown")
             return _auth_guidance_response(
                 "Invalid bearer token format. "
                 "Get a valid token from the [setup page](/setup)."
@@ -140,12 +172,16 @@ def require_auth(func: Callable) -> Callable:
                 "Token %s... has no session file — returning auth guidance",
                 validated[:8],
             )
+            _fire_bearer_telemetry(
+                "auth_failed", "bearer_no_session", "session_expired"
+            )
             return _auth_guidance_response(
                 "This bearer token is not registered. "
                 "Authenticate at the [setup page](/setup) to get a valid token."
             )
 
         # Token is valid and session exists — run the tool
+        _fire_bearer_telemetry("auth_completed", "bearer_valid")
         set_request_token(validated)
         return await func(*args, **kwargs)
 
@@ -229,9 +265,7 @@ def with_auth_context(func: Callable) -> Callable:
                 if access_token is not None:
                     validated = access_token.token
                     set_request_token(validated)
-                    logger.info(
-                        f"Bearer token from auth provider: {validated[:8]}..."
-                    )
+                    logger.info(f"Bearer token from auth provider: {validated[:8]}...")
                     return await func(*args, **kwargs)
             error_msg = (
                 "Missing Bearer token in Authorization header. HTTP requests require "

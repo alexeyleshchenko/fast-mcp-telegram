@@ -529,6 +529,13 @@ def register_web_setup_routes(mcp_app):
             logger.error("Failed to connect setup client for phone %s: %s", masked, e)
             await client.disconnect()
             temp_session_path.unlink(missing_ok=True)
+            send_auth_event(
+                event="auth_failed",
+                method="phone",
+                branch="phone_code",
+                duration_ms=0.0,
+                error="connect_failed",
+            )
             return _setup_error_fragment(request, f"Failed to connect: {e}")
 
         try:
@@ -601,12 +608,20 @@ def register_web_setup_routes(mcp_app):
             logger.info("Phone %s verified successfully", masked_phone)
             created_at = state.get("created_at", 0)
             duration = (time.time() - created_at) * 1000 if created_at else 0.0
-            send_auth_event(
-                event="auth_completed",
-                method="phone",
-                branch="phone_code",
-                duration_ms=duration,
-            )
+            if state.get("reauthorizing"):
+                send_auth_event(
+                    event="auth_completed",
+                    method="reauth",
+                    branch="reauth_phone",
+                    duration_ms=duration,
+                )
+            else:
+                send_auth_event(
+                    event="auth_completed",
+                    method="phone",
+                    branch="phone_code",
+                    duration_ms=duration,
+                )
             return await _complete_authentication(request, state)
         except SessionPasswordNeededError:
             hint = ""
@@ -633,7 +648,7 @@ def register_web_setup_routes(mcp_app):
                 method="phone",
                 branch="phone_code",
                 duration_ms=duration,
-                error="invalid_code",
+                error="unknown",
             )
             return _fragment(
                 request,
@@ -865,6 +880,15 @@ def register_web_setup_routes(mcp_app):
                 getattr(sent, "timeout", None),
             )
         except PhoneNumberFloodError:
+            created_at = state.get("created_at", 0)
+            duration = (time.time() - created_at) * 1000 if created_at else 0.0
+            send_auth_event(
+                event="auth_failed",
+                method="reauth",
+                branch="reauth_phone",
+                duration_ms=duration,
+                error="flood_wait",
+            )
             return _fragment(
                 request,
                 "fragments/reauthorize_phone.html",
@@ -872,6 +896,15 @@ def register_web_setup_routes(mcp_app):
             )
         except Exception as e:
             logger.warning("Failed to send reauthorization code: %s", e)
+            created_at = state.get("created_at", 0)
+            duration = (time.time() - created_at) * 1000 if created_at else 0.0
+            send_auth_event(
+                event="auth_failed",
+                method="reauth",
+                branch="reauth_phone",
+                duration_ms=duration,
+                error="unknown",
+            )
             return _fragment(
                 request,
                 "fragments/reauthorize_phone.html",
@@ -1030,6 +1063,12 @@ def register_web_setup_routes(mcp_app):
             "authorized": False,
             "created_at": time.time(),
         }
+
+        send_auth_event(
+            event="auth_started",
+            method="qr",
+            branch="qr_scan",
+        )
 
         return _fragment(
             request,
@@ -1193,6 +1232,15 @@ def register_web_setup_routes(mcp_app):
             )
         except Exception as e:
             logger.warning("QR 2FA failed for session %s: %s", setup_id, e)
+            created_at = state.get("created_at", 0)
+            duration = (time.time() - created_at) * 1000 if created_at else 0.0
+            send_auth_event(
+                event="auth_failed",
+                method="qr",
+                branch="qr_2fa",
+                duration_ms=duration,
+                error="unknown",
+            )
             return _fragment(
                 request,
                 "fragments/qr_2fa.html",
