@@ -1,7 +1,7 @@
 # S3 Session Storage — Implementation Design
 
 **Status:** Proposed
-**ADR:** [0006-s3-session-storage.md](../adr/0006-s3-session-storage.md)
+**ADR:** [0009-s3-session-storage.md](../adr/0009-s3-session-storage.md)
 
 This document covers implementation details only. For context, decisions, alternatives, platform setup, and security considerations, see the ADR.
 

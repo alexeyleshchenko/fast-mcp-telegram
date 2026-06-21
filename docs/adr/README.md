@@ -23,3 +23,6 @@ Concise records of significant technical decisions for fast-mcp-telegram.
 | [0005](0005-anonymous-tool-telemetry.md) | Anonymous Tool Telemetry | accepted (2026-06-13) |
 | [0006](0006-abuse-prevention-for-collection-endpoint.md) | Abuse Prevention for the Open Collection Endpoint | proposed (2026-06-10) |
 | [0007](0007-qr-login-cli-setup.md) | QR Login in CLI Setup — QR-First Auth with Terminal Rendering | proposed (2026-06-18) |
+| [0008](0008-auth-telemetry-events.md) | Auth Telemetry Events — Buffered flow-level auth instrumentation | accepted (2026-06-19) |
+| [0009](0009-s3-session-storage.md) | S3 Session Storage for Ephemeral Deployments | proposed (2026-06-17) |
+| [0010](0010-north-star-pivot.md) | North Star Pivot — Best Telegram Bridge for AI Agents | accepted (2026-06-15) |

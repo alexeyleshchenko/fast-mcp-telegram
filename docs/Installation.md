@@ -277,7 +277,7 @@ AWS_SECRET_ACCESS_KEY=...
 
 ### ADR and design doc
 
-Architecture decisions: [ADR 0006](adr/0006-s3-session-storage.md). Implementation details: [design doc](design/s3-session-storage-design.md).
+Architecture decisions: [ADR 0009](adr/0009-s3-session-storage.md). Implementation details: [design doc](design/s3-session-storage-design.md).
 
 ---
 

@@ -1,6 +1,6 @@
 # ADR 0006: Abuse Prevention for the Open Telemetry Collection Endpoint
 
-**Status:** proposed
+**Status:** accepted
 **Date:** 2026-06-10
 
 ## Context
