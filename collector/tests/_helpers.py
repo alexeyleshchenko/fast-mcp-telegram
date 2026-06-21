@@ -26,3 +26,25 @@ def make_nested_payload(**overrides) -> dict:
     }
     payload.update(overrides)
     return payload
+
+
+def make_auth_event(**overrides) -> dict:
+    """Build an auth event payload that mirrors ``src.telemetry.send_auth_event()`` output.
+
+    Returns a dict that passes the collector's ``AuthEvent`` validation.
+    Tests can override any field via keyword args.
+    """
+    now = int(datetime.now(UTC).timestamp())
+    event = {
+        "type": "auth",
+        "iid": "550e8400-e29b-41d4-a716-446655440000",
+        "ts": now,
+        "ver": "0.38.0",
+        "event": "auth_started",
+        "method": "phone",
+        "branch": "phone_code",
+        "duration_ms": 0.0,
+        "error": None,
+    }
+    event.update(overrides)
+    return event

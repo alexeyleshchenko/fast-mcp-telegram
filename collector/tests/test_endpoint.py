@@ -3,6 +3,7 @@
 import time
 
 from app.services import INSTANCE_RATE_LIMIT
+
 from collector.tests._helpers import make_nested_payload
 
 
@@ -82,3 +83,77 @@ class TestCollectEndpoint:
         # One more should be rate-limited
         resp = client.post("/v1/event", json=valid_payload_data)
         assert resp.status_code == 429
+
+
+class TestAuthEventEndpoint:
+    """POST /v1/event with type=auth"""
+
+    def _make_auth_event(self, **overrides):
+        from collector.tests._helpers import make_auth_event
+        return make_auth_event(**overrides)
+
+    def test_auth_event_returns_204(self, client):
+        """A valid auth event returns 204 No Content."""
+        resp = client.post("/v1/event", json=self._make_auth_event())
+        assert resp.status_code == 204
+
+    def test_auth_event_completed_returns_204(self, client):
+        """Auth completed event returns 204."""
+        resp = client.post(
+            "/v1/event",
+            json=self._make_auth_event(
+                event="auth_completed",
+                duration_ms=12340.5,
+            ),
+        )
+        assert resp.status_code == 204
+
+    def test_auth_event_failed_returns_204(self, client):
+        """Auth failed event returns 204."""
+        resp = client.post(
+            "/v1/event",
+            json=self._make_auth_event(
+                event="auth_failed",
+                error="flood_wait",
+                duration_ms=500.0,
+            ),
+        )
+        assert resp.status_code == 204
+
+    def test_auth_event_abandoned_returns_204(self, client):
+        """Auth abandoned event returns 204."""
+        resp = client.post(
+            "/v1/event",
+            json=self._make_auth_event(
+                event="auth_abandoned",
+                duration_ms=300000.0,
+            ),
+        )
+        assert resp.status_code == 204
+
+    def test_auth_event_invalid_event_returns_422(self, client):
+        """Auth event with invalid event type returns 422."""
+        resp = client.post(
+            "/v1/event",
+            json=self._make_auth_event(event="auth_unknown"),
+        )
+        assert resp.status_code == 422
+
+    def test_auth_event_missing_method_returns_422(self, client):
+        """Auth event without method returns 422."""
+        data = self._make_auth_event()
+        del data["method"]
+        resp = client.post("/v1/event", json=data)
+        assert resp.status_code == 422
+
+    def test_auth_event_qr_method_returns_204(self, client):
+        """Auth event with QR method returns 204."""
+        resp = client.post(
+            "/v1/event",
+            json=self._make_auth_event(
+                event="auth_started",
+                method="qr",
+                branch="qr_scan",
+            ),
+        )
+        assert resp.status_code == 204

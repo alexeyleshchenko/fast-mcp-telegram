@@ -2,14 +2,12 @@
 
 
 import pytest
-
+from app.models import ValidationError as ServiceValidationError
 from app.services import (
     RateLimitError,
     process_event,
 )
-from app.services import (
-    ValidationError as ServiceValidationError,
-)
+
 from collector.tests._helpers import make_nested_payload
 
 
@@ -100,3 +98,77 @@ class TestProcessEvent:
         """close() cleans up."""
         storage.close()
         assert len(storage.events) == 0
+
+
+class TestProcessAuthEvent:
+    """Auth event processing through process_event."""
+
+    @pytest.fixture
+    def valid_auth_data(self):
+        import time
+        now = int(time.time())
+        return {
+            "type": "auth",
+            "iid": "550e8400-e29b-41d4-a716-446655440000",
+            "ts": now,
+            "ver": "0.38.0",
+            "event": "auth_started",
+            "method": "phone",
+            "branch": "phone_code",
+            "duration_ms": 0.0,
+            "error": None,
+        }
+
+    def test_auth_event_stored(self, storage, valid_auth_data):
+        """A valid auth event is stored."""
+        process_event(valid_auth_data, "192.168.1.1", storage)
+        assert len(storage.events) == 1
+        stored = storage.events[0]["payload"]
+        assert stored.type == "auth"
+        assert stored.event == "auth_started"
+
+    def test_auth_event_completed_stored(self, storage, valid_auth_data):
+        """Auth completed event is stored."""
+        valid_auth_data["event"] = "auth_completed"
+        valid_auth_data["duration_ms"] = 12340.5
+        process_event(valid_auth_data, "192.168.1.1", storage)
+        assert len(storage.events) == 1
+        stored = storage.events[0]["payload"]
+        assert stored.event == "auth_completed"
+        assert stored.duration_ms == 12340.5
+
+    def test_auth_event_failed_stored(self, storage, valid_auth_data):
+        """Auth failed event with error is stored."""
+        valid_auth_data["event"] = "auth_failed"
+        valid_auth_data["error"] = "flood_wait"
+        valid_auth_data["duration_ms"] = 500.0
+        process_event(valid_auth_data, "192.168.1.1", storage)
+        assert len(storage.events) == 1
+        stored = storage.events[0]["payload"]
+        assert stored.event == "auth_failed"
+        assert stored.error == "flood_wait"
+
+    def test_auth_event_abandoned_stored(self, storage, valid_auth_data):
+        """Auth abandoned event is stored."""
+        valid_auth_data["event"] = "auth_abandoned"
+        valid_auth_data["duration_ms"] = 300000.0
+        process_event(valid_auth_data, "192.168.1.1", storage)
+        assert len(storage.events) == 1
+
+    def test_auth_event_invalid_rejected(self, storage, valid_auth_data):
+        """Invalid auth event is rejected."""
+        valid_auth_data["event"] = "auth_unknown"
+        with pytest.raises(ServiceValidationError):
+            process_event(valid_auth_data, "192.168.1.1", storage)
+        assert len(storage.events) == 0
+
+    def test_auth_event_rate_limited(self, storage, valid_auth_data):
+        """Auth events are subject to rate limiting."""
+        from app.services import INSTANCE_RATE_LIMIT
+        for i in range(INSTANCE_RATE_LIMIT):
+            data = dict(valid_auth_data)
+            data["duration_ms"] = float(i)
+            process_event(data, "10.0.0.1", storage)
+        assert len(storage.events) == INSTANCE_RATE_LIMIT
+        with pytest.raises(RateLimitError):
+            process_event(valid_auth_data, "10.0.0.1", storage)

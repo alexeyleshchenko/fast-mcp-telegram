@@ -156,14 +156,15 @@ class MetricsStore:
             # Deep-copy tools to avoid mutation after releasing the lock
             tools_copy: dict[str, dict] = {}
             for tool_name, stats in self._tools.items():
-                ps_copy: dict[str, dict] = {}
-                for pk, pstats in stats["param_sets"].items():
-                    ps_copy[pk] = {
+                ps_copy: dict[str, dict] = {
+                    pk: {
                         "calls": pstats["calls"],
                         "errors": pstats["errors"],
                         "duration_ms": pstats["duration_ms"],
                         "traces": list(pstats["traces"]),
                     }
+                    for pk, pstats in stats["param_sets"].items()
+                }
                 tools_copy[tool_name] = {
                     "calls": stats["calls"],
                     "errors": stats["errors"],
@@ -264,7 +265,7 @@ def _collect_runtime() -> dict:
     session_dir = config.session_directory
     session_files = 0
     if session_dir.is_dir():
-        session_files = sum(1 for f in session_dir.iterdir() if f.suffix == ".session")
+        session_files = sum(bool(f.suffix == ".session") for f in session_dir.iterdir())
 
     # Runtime import avoids circular dependencies at module load time.
     from src.client.connection import get_active_session_count
@@ -348,6 +349,79 @@ def send_heartbeat(payload: dict | None = None) -> None:
         logger.debug("Telemetry: HTTP %s from %s", exc.code, TELEMETRY_ENDPOINT)
     except (OSError, urllib.error.URLError) as exc:
         logger.debug("Telemetry: network error — %s", exc)
+
+
+# ---------------------------------------------------------------------------
+# Auth event telemetry (ADR 0008)
+# ---------------------------------------------------------------------------
+
+
+def send_auth_event(
+    *,
+    event: str,
+    method: str,
+    branch: str,
+    duration_ms: float = 0.0,
+    error: str | None = None,
+) -> None:
+    """Fire an auth telemetry event immediately (not on heartbeat interval).
+
+    Auth events are rare and high-signal — each user authenticates once.
+    Individual events give better granularity than aggregating into
+    6-hour heartbeats.
+
+    Respects ``DO_NOT_TRACK=1``.  Network errors are silently logged.
+
+    Args:
+        event: What happened — ``auth_started``, ``auth_completed``,
+            ``auth_failed``, or ``auth_abandoned``.
+        method: Auth method — ``phone``, ``qr``, ``reauth``, ``bearer_check``.
+        branch: Code path — ``phone_code``, ``phone_2fa``, ``qr_scan``,
+            ``qr_2fa``, ``reauth_phone``, ``bearer_valid``,
+            ``bearer_no_session``, ``bearer_invalid``.
+        duration_ms: Wall-clock duration from start to this event.
+        error: Categorized error (``flood_wait``, ``invalid_code``, etc.)
+            or ``None`` for success/started events.
+    """
+    if not should_send():
+        return
+
+    payload = {
+        "type": "auth",
+        "iid": get_instance_id(),
+        "ts": int(time.time()),
+        "ver": __version__,
+        "event": event,
+        "method": method,
+        "branch": branch,
+        "duration_ms": duration_ms,
+        "error": error,
+    }
+
+    # Debug mode — print to stderr instead of sending
+    if os.environ.get("MCP_TELEMETRY_DEBUG", "").strip() == "1":
+        print("TELEMETRY", json.dumps(payload, indent=2), file=sys.stderr)
+        return
+
+    # Fire the POST (blocking in this thread — caller should run in executor)
+    import urllib.error
+    import urllib.request
+
+    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    req = urllib.request.Request(
+        TELEMETRY_ENDPOINT,
+        data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        urllib.request.urlopen(req, timeout=10)
+    except urllib.error.HTTPError as exc:
+        logger.debug(
+            "Telemetry auth event: HTTP %s from %s", exc.code, TELEMETRY_ENDPOINT
+        )
+    except (OSError, urllib.error.URLError) as exc:
+        logger.debug("Telemetry auth event: network error — %s", exc)
 
 
 # ---------------------------------------------------------------------------

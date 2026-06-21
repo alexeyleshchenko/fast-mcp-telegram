@@ -16,13 +16,12 @@ from __future__ import annotations
 
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any
 
 import psycopg2
 import psycopg2.extras
-
-from app.models import TelemetryPayload
+from app.services import PayloadLike
 
 _SQL_CREATE_TABLE = """
 CREATE TABLE IF NOT EXISTS telemetry (
@@ -113,7 +112,7 @@ class PgStorage:
 
     def store(
         self,
-        payload: TelemetryPayload,
+        payload: PayloadLike,
         source_ip_hash: str,
         payload_hash: str,
     ) -> None:
