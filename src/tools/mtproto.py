@@ -131,7 +131,24 @@ def _construct_tl_object_from_dict(data: Any) -> Any:
                         _construct_tl_object_from_dict(item) for item in value
                     ]
                 else:
+                    # Coerce numeric strings back to int.  After the int64
+                    # stringification fix, access_hash and large ids are
+                    # serialized as strings in JSON results.  When clients
+                    # pass these back, json.loads produces strings where TL
+                    # constructors need ints.
+                    if isinstance(value, str):
+                        try:
+                            value = int(value)
+                        except (ValueError, TypeError):
+                            pass
                     params[param_name] = value
+            else:
+                # Fill missing required int params with 0 so callers that
+                # omit offset_id / offset_date / add_offset / hash etc.
+                # don't crash the constructor.
+                annotation = sig.parameters[param_name].annotation
+                if annotation is int:
+                    params[param_name] = 0
 
         return cls(**params)
     except Exception as e:
@@ -200,6 +217,14 @@ async def _resolve_params(params: dict[str, Any]) -> dict[str, Any]:
             # Telethon TL objects usually have to_dict
             if hasattr(value, "to_dict") or getattr(value, "_", None):
                 return value
+        # Parse Telegram URLs (https://t.me/…, tg://…) to peer identifiers
+        # before falling through to get_input_entity, which cannot resolve URLs.
+        if isinstance(value, str):
+            from src.utils.entity import _parse_telegram_url
+
+            parsed = _parse_telegram_url(value)
+            if parsed is not None:
+                value = parsed
         if is_ambiguous_peer_scalar(value):
             entity = await get_entity_by_id(value, client=client)
             if entity is not None:
@@ -284,6 +309,34 @@ def _resolve_method_class(method_full_name: str):
 # ============================================================================
 # PARAMETER SANITIZATION
 # ============================================================================
+
+
+def _fill_missing_int_defaults(cls, params: dict[str, Any]) -> None:
+    """Fill missing required int/nullable params with sensible defaults in-place.
+
+    After the int64 stringification fix, callers may omit params like
+    offset_id / add_offset / hash that Telegram expects.  Rather than a
+    cryptic "missing N required" TypeError, fill int-typed params with 0
+    and nullable-typed params with None.
+    """
+    try:
+        sig = inspect.signature(cls.__init__)
+    except (ValueError, TypeError):
+        return
+    for name, param in sig.parameters.items():
+        if name == "self" or name in params:
+            continue
+        if param.default is not inspect.Parameter.empty:
+            continue  # has a default already
+        if param.annotation is int:
+            params[name] = 0
+        else:
+            # Check for Union types containing None (e.g. datetime | None)
+            try:
+                if type(None) in param.annotation.__args__:
+                    params[name] = None
+            except AttributeError:
+                pass
 
 
 def _sanitize_mtproto_params(params: dict[str, Any]) -> dict[str, Any]:
@@ -437,6 +490,11 @@ async def invoke_mtproto_impl(
 
             # Security: Validate and sanitize parameters
             sanitized_params = _sanitize_mtproto_params(final_params)
+
+            # Fill missing required int params with 0 so callers that omit
+            # offset_id / offset_date / add_offset / hash etc. get defaults
+            # instead of a cryptic "missing N required" TypeError.
+            _fill_missing_int_defaults(method_cls, sanitized_params)
 
             # Create method object and invoke via Telethon
             method_obj = method_cls(**sanitized_params)
