@@ -8,7 +8,7 @@
   ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 5,
+  "version": 6,
   "refresh": "5m",
   "time": {
     "from": "now-30d",
@@ -1038,7 +1038,7 @@
     {
       "id": 19,
       "type": "table",
-      "title": "Mode \u00d7 OS",
+      "title": "Mode × OS",
       "gridPos": {
         "h": 7,
         "w": 12,
@@ -1160,6 +1160,641 @@
         "sortBy": [
           {
             "displayName": "Last Seen",
+            "desc": true
+          }
+        ]
+      }
+    },
+    {
+      "id": 24,
+      "type": "row",
+      "title": "Auth Telemetry",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 62
+      }
+    },
+    {
+      "id": 25,
+      "type": "stat",
+      "title": "Total Auth Flows",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 63
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "telemetry-pg"
+      },
+      "targets": [
+        {
+          "rawSql": "SELECT count(*) FROM telemetry WHERE payload->>'type' = 'auth' AND (('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%'))",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 26,
+      "type": "stat",
+      "title": "Auth Success Rate",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 63
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "telemetry-pg"
+      },
+      "targets": [
+        {
+          "rawSql": "WITH flows AS (\n    SELECT payload->>'flow_id' AS fid,\n           bool_or(e->>'event' = 'session_established') AS success\n    FROM telemetry, jsonb_array_elements(payload->'events') AS e(event)\n    WHERE payload->>'type' = 'auth' AND (('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%'))\n    GROUP BY 1\n)\nSELECT CASE WHEN count(*) > 0\n  THEN round(count(*) FILTER (WHERE success)::numeric / count(*) * 100, 1)\n  ELSE 0 END FROM flows",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 50
+              },
+              {
+                "color": "green",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "percent",
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 27,
+      "type": "stat",
+      "title": "Auth Errors (24h)",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 63
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "telemetry-pg"
+      },
+      "targets": [
+        {
+          "rawSql": "SELECT count(DISTINCT payload->>'flow_id')\nFROM telemetry, jsonb_array_elements(payload->'events') AS e(event)\nWHERE payload->>'type' = 'auth'\n  AND e->>'error' IS NOT NULL\n  AND received_at > now() - interval '24 hours'\n  AND (('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%'))",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 3
+              },
+              {
+                "color": "red",
+                "value": 10
+              }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 28,
+      "type": "stat",
+      "title": "Flows Today",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 63
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "telemetry-pg"
+      },
+      "targets": [
+        {
+          "rawSql": "SELECT count(*) FROM telemetry\nWHERE payload->>'type' = 'auth'\n  AND received_at > now() - interval '24 hours'\n  AND (('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%'))",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 29,
+      "type": "barchart",
+      "title": "Auth Flow Funnel",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 67
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "telemetry-pg"
+      },
+      "targets": [
+        {
+          "rawSql": "SELECT e->>'event' AS metric, count(*)::int AS value\nFROM telemetry, jsonb_array_elements(payload->'events') AS e(event)\nWHERE payload->>'type' = 'auth' AND (('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%'))\nGROUP BY 1 ORDER BY 2 DESC",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "showValue": "auto",
+        "groupWidth": 0.7,
+        "barWidth": 0.9,
+        "stacking": "none",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        },
+        "xTickLabelRotation": 0,
+        "colorByField": ""
+      }
+    },
+    {
+      "id": 30,
+      "type": "piechart",
+      "title": "Auth Methods",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 67
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "telemetry-pg"
+      },
+      "targets": [
+        {
+          "rawSql": "SELECT payload->>'method' AS metric, count(*)::int AS value\nFROM telemetry WHERE payload->>'type' = 'auth' AND (('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%'))\nGROUP BY 1 ORDER BY 2 DESC",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [],
+          "fields": "",
+          "values": true
+        },
+        "pieType": "donut",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value",
+            "percent"
+          ]
+        }
+      }
+    },
+    {
+      "id": 31,
+      "type": "piechart",
+      "title": "Auth Error Types",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 67
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "telemetry-pg"
+      },
+      "targets": [
+        {
+          "rawSql": "SELECT e->>'error' AS metric, count(*)::int AS value\nFROM telemetry, jsonb_array_elements(payload->'events') AS e(event)\nWHERE payload->>'type' = 'auth' AND e->>'error' IS NOT NULL AND (('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%'))\nGROUP BY 1 ORDER BY 2 DESC",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [],
+          "fields": "",
+          "values": true
+        },
+        "pieType": "donut",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value",
+            "percent"
+          ]
+        }
+      }
+    },
+    {
+      "id": 32,
+      "type": "timeseries",
+      "title": "Auth Flows / Day",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 75
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "telemetry-pg"
+      },
+      "targets": [
+        {
+          "rawSql": "SELECT date_trunc('day', received_at) AS time, count(*) AS \"flows\"\nFROM telemetry\nWHERE payload->>'type' = 'auth'\n  AND $__timeFilter(received_at) AND (('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%'))\nGROUP BY 1 ORDER BY 1",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      }
+    },
+    {
+      "id": 33,
+      "type": "timeseries",
+      "title": "Avg Flow Duration (sec)",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 75
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "telemetry-pg"
+      },
+      "targets": [
+        {
+          "rawSql": "WITH flows AS (\n    SELECT received_at,\n           (max((e->>'ts')::int) - min((e->>'ts')::int)) AS dur\n    FROM telemetry, jsonb_array_elements(payload->'events') AS e(event)\n    WHERE payload->>'type' = 'auth'\n      AND $__timeFilter(received_at) AND (('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%'))\n    GROUP BY received_at, payload->>'flow_id'\n    HAVING count(*) > 1\n)\nSELECT date_trunc('day', received_at) AS time,\n       round(avg(dur), 0) AS \"avg_sec\"\nFROM flows GROUP BY 1 ORDER BY 1",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "seconds",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      }
+    },
+    {
+      "id": 34,
+      "type": "table",
+      "title": "Incomplete Flows (no terminal event)",
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 83
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "telemetry-pg"
+      },
+      "targets": [
+        {
+          "rawSql": "WITH flow_events AS (\n    SELECT payload->>'flow_id' AS flow_id,\n           payload->>'method' AS method,\n           payload->>'branch' AS branch,\n           LEFT(payload->>'iid', 8) AS iid,\n           bool_or(e->>'event' = 'session_established') AS has_success,\n           bool_or(e->>'event' = 'cleanup_completed') AS has_cleanup,\n           count(*) AS event_count,\n           to_char(min(to_timestamp((e->>'ts')::int)), 'YYYY-MM-DD HH24:MI') AS started\n    FROM telemetry, jsonb_array_elements(payload->'events') AS e(event)\n    WHERE payload->>'type' = 'auth' AND (('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%'))\n    GROUP BY 1, 2, 3, 4\n)\nSELECT flow_id AS \"Flow\", method AS \"Method\", branch AS \"Branch\",\n       iid AS \"Instance\", event_count AS \"Events\", started AS \"Started\"\nFROM flow_events\nWHERE NOT has_success AND NOT has_cleanup\nORDER BY started DESC\nLIMIT 50",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": []
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Events"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 5
+                    },
+                    {
+                      "color": "red",
+                      "value": 10
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "sortBy": [
+          {
+            "displayName": "Started",
             "desc": true
           }
         ]
