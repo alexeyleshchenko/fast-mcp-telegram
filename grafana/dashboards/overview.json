@@ -1193,7 +1193,7 @@
       },
       "targets": [
         {
-          "rawSql": "SELECT count(*) FROM telemetry WHERE payload->>'type' = 'auth' AND (('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%'))",
+          "rawSql": "SELECT count(*) FROM telemetry WHERE payload->>'type' = 'auth' AND payload ? 'events' AND (('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%'))",
           "format": "table",
           "refId": "A"
         }
@@ -1369,7 +1369,7 @@
       },
       "targets": [
         {
-          "rawSql": "SELECT count(*) FROM telemetry\nWHERE payload->>'type' = 'auth'\n  AND received_at > now() - interval '24 hours'\n  AND (('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%'))",
+          "rawSql": "SELECT count(*) FROM telemetry\nWHERE payload->>'type' = 'auth'\n  AND payload ? 'events'\n  AND received_at > now() - interval '24 hours'\n  AND (('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%'))",
           "format": "table",
           "refId": "A"
         }
@@ -1479,7 +1479,7 @@
       },
       "targets": [
         {
-          "rawSql": "SELECT payload->>'method' AS metric, count(*)::int AS value\nFROM telemetry WHERE payload->>'type' = 'auth' AND (('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%'))\nGROUP BY 1 ORDER BY 2 DESC",
+          "rawSql": "SELECT payload->>'method' AS metric, count(*)::int AS value\nFROM telemetry WHERE payload->>'type' = 'auth' AND payload ? 'events' AND (('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%'))\nGROUP BY 1 ORDER BY 2 DESC",
           "format": "table",
           "refId": "A"
         }
@@ -1579,7 +1579,7 @@
       },
       "targets": [
         {
-          "rawSql": "SELECT date_trunc('day', received_at) AS time, count(*) AS \"flows\"\nFROM telemetry\nWHERE payload->>'type' = 'auth'\n  AND $__timeFilter(received_at) AND (('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%'))\nGROUP BY 1 ORDER BY 1",
+          "rawSql": "SELECT date_trunc('day', received_at) AS time, count(*) AS \"flows\"\nFROM telemetry\nWHERE payload->>'type' = 'auth'\n  AND payload ? 'events'\n  AND $__timeFilter(received_at) AND (('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%'))\nGROUP BY 1 ORDER BY 1",
           "format": "time_series",
           "refId": "A"
         }
