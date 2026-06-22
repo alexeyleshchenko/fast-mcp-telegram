@@ -156,14 +156,15 @@ class MetricsStore:
             # Deep-copy tools to avoid mutation after releasing the lock
             tools_copy: dict[str, dict] = {}
             for tool_name, stats in self._tools.items():
-                ps_copy: dict[str, dict] = {}
-                for pk, pstats in stats["param_sets"].items():
-                    ps_copy[pk] = {
+                ps_copy: dict[str, dict] = {
+                    pk: {
                         "calls": pstats["calls"],
                         "errors": pstats["errors"],
                         "duration_ms": pstats["duration_ms"],
                         "traces": list(pstats["traces"]),
                     }
+                    for pk, pstats in stats["param_sets"].items()
+                }
                 tools_copy[tool_name] = {
                     "calls": stats["calls"],
                     "errors": stats["errors"],
@@ -264,7 +265,7 @@ def _collect_runtime() -> dict:
     session_dir = config.session_directory
     session_files = 0
     if session_dir.is_dir():
-        session_files = sum(1 for f in session_dir.iterdir() if f.suffix == ".session")
+        session_files = sum(bool(f.suffix == ".session") for f in session_dir.iterdir())
 
     # Runtime import avoids circular dependencies at module load time.
     from src.client.connection import get_active_session_count
@@ -458,7 +459,7 @@ def send_auth_event(
         return
 
     entry: dict = {
-        "ts": int(time.time()),
+        "ts": time.time(),
         "event": event,
         "flow_id": flow_id,
         "method": method,
@@ -490,7 +491,7 @@ def flush_auth_events(flow_id: str) -> None:
         "type": "auth",
         "iid": get_instance_id(),
         "flow_id": flow_id,
-        "ts": int(time.time()),
+        "ts": time.time(),
         "ver": __version__,
         "method": method,
         "branch": branch,

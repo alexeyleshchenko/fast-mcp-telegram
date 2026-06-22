@@ -169,7 +169,7 @@ class TestSendAuthEvent:
         assert flow_id not in tel._auth_buffers
 
     def test_send_auth_event_has_timestamp(self, tel):
-        """Each event has a ts field (unix seconds)."""
+        """Each event has a ts field (unix timestamp as float)."""
         flow_id = str(uuid.uuid4())
         tel.send_auth_event(
             event="user_submitted_phone",
@@ -179,8 +179,38 @@ class TestSendAuthEvent:
         )
         event = tel._auth_buffers[flow_id][0]
         assert "ts" in event
-        assert isinstance(event["ts"], int)
+        assert isinstance(event["ts"], float)
         assert event["ts"] > 0
+
+    def test_send_auth_event_subsecond_precision(self, tel, monkeypatch):
+        """Events within the same second have distinct timestamps.
+
+        QR auth flows can complete in < 1 second.  If timestamps are
+        truncated to integer seconds, the Grafana duration query yields 0.
+        """
+        import time
+
+        times = iter([1000.123, 1000.456])
+        monkeypatch.setattr(time, "time", lambda: next(times))
+
+        flow_id = str(uuid.uuid4())
+        tel.send_auth_event(
+            event="qr_session_created",
+            flow_id=flow_id,
+            method="qr",
+            branch="qr_scan",
+        )
+        tel.send_auth_event(
+            event="session_established",
+            flow_id=flow_id,
+            method="qr",
+            branch="qr_scan",
+        )
+
+        ts1 = tel._auth_buffers[flow_id][0]["ts"]
+        ts2 = tel._auth_buffers[flow_id][1]["ts"]
+        assert ts1 != ts2, "Events within the same second must have distinct timestamps"
+        assert ts2 - ts1 == pytest.approx(0.333)
 
 
 # ───────────────────────────── flush_auth_events ─────────────────────────
@@ -239,7 +269,7 @@ class TestFlushAuthEvents:
         monkeypatch.setattr(tel, "_post_json", lambda *_: called.append(1))
 
         tel.flush_auth_events(str(uuid.uuid4()))
-        assert len(called) == 0
+        assert not called
 
     def test_flush_includes_metadata(self, tel, monkeypatch, _sync_threads):
         """Flushed payload includes iid, ver, method, branch."""
