@@ -1659,7 +1659,7 @@
       },
       "targets": [
         {
-          "rawSql": "WITH flows AS (\n    SELECT e->>'flow_id' AS fid,\n           min(received_at) AS time,\n           min((e->>'ts')::float) AS min_ts,\n           max((e->>'ts')::float) AS max_ts\n    FROM telemetry, jsonb_array_elements(payload->'events') AS e(event)\n    WHERE payload->>'type' = 'auth'\n      AND $__timeFilter(received_at) AND (('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%'))\n    GROUP BY e->>'flow_id'\n    HAVING count(*) > 1\n)\nSELECT time,\n       round(max_ts - min_ts, 2) AS \"duration_sec\"\nFROM flows\nWHERE max_ts > min_ts\nORDER BY 1",
+          "rawSql": "WITH flows AS (\n    SELECT e->>'flow_id' AS fid,\n           min(received_at) AS time,\n           min((e->>'ts')::numeric) AS min_ts,\n           max((e->>'ts')::numeric) AS max_ts\n    FROM telemetry, jsonb_array_elements(payload->'events') AS e(event)\n    WHERE payload->>'type' = 'auth'\n      AND $__timeFilter(received_at) AND (('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%'))\n    GROUP BY e->>'flow_id'\n    HAVING count(*) > 1\n)\nSELECT time,\n       round(max_ts - min_ts, 2) AS \"duration_sec\"\nFROM flows\nWHERE max_ts > min_ts\nORDER BY 1",
           "format": "time_series",
           "refId": "A"
         }
