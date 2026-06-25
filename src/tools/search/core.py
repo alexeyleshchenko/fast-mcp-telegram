@@ -217,6 +217,19 @@ async def search_messages_impl(
             exception=e,
         )
 
+    mode_names = {
+        MessageRetrievalMode.MESSAGE_IDS: "message_ids",
+        MessageRetrievalMode.REPLIES: "reply",
+    }
+    if from_user and mode in mode_names:
+        mode_name = mode_names[mode]
+        return log_and_build_error(
+            operation="get_messages",
+            error_message=f"from_user is not supported with {mode_name} mode; it only works with per-chat search (chat_id + query or chat_id alone)",
+            params=params,
+            exception=ValueError(f"from_user incompatible with {mode_name} mode"),
+        )
+
     return await _dispatch_search_mode(
         mode,
         params,
