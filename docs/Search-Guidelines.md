@@ -51,6 +51,8 @@ Telegram search has specific limitations that AI models should understand to pro
 
 **Note:** `from_user` uses Telegram's native `from_id` filter — zero extra latency, server-side filtering. Only works with per-chat search (`get_messages` with `chat_id`). For global search, results must be filtered client-side.
 
+**Note:** Both `chat_id` and `from_user` accept `-100` prefixed IDs (e.g., `"-1001234567890"`). The `-100` prefix is automatically stripped to resolve the raw channel/user ID. Also accepts t.me URLs, `"me"` for Saved Messages, and numeric IDs with multi-peer fallback.
+
 ### Global Search Examples
 
 ```json
