@@ -639,6 +639,41 @@ class TestGetMessagesFromUser:
         assert "from_user is not supported" in result["error"]
         assert "reply" in result["error"]
 
+    @pytest.mark.asyncio
+    async def test_from_user_with_global_search_returns_error(self):
+        """Should reject from_user without chat_id (global search)."""
+        result = await search_messages_impl(
+            query="hello",
+            from_user="alice",
+            limit=10,
+        )
+        assert "error" in result
+        assert "from_user requires chat_id" in result["error"]
+
+    @pytest.mark.asyncio
+    async def test_from_user_empty_string_returns_error(self):
+        """Should reject empty string from_user."""
+        result = await search_messages_impl(
+            chat_id="me",
+            query="hello",
+            from_user="",
+            limit=10,
+        )
+        assert "error" in result
+        assert "from_user must not be empty" in result["error"]
+
+    @pytest.mark.asyncio
+    async def test_from_user_whitespace_only_returns_error(self):
+        """Should reject whitespace-only from_user."""
+        result = await search_messages_impl(
+            chat_id="me",
+            query="hello",
+            from_user="   ",
+            limit=10,
+        )
+        assert "error" in result
+        assert "from_user must not be empty" in result["error"]
+
 
 class TestGetMessagesDateFiltering:
     """Test min_date/max_date filtering for per-chat search."""

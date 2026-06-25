@@ -217,6 +217,23 @@ async def search_messages_impl(
             exception=e,
         )
 
+    # Validate from_user early
+    if from_user is not None and not from_user.strip():
+        return log_and_build_error(
+            operation="get_messages",
+            error_message="from_user must not be empty",
+            params=params,
+            exception=ValueError("from_user must not be empty"),
+        )
+
+    if from_user and chat_id is None:
+        return log_and_build_error(
+            operation="get_messages",
+            error_message="from_user requires chat_id; it only works with per-chat search",
+            params=params,
+            exception=ValueError("from_user requires chat_id"),
+        )
+
     mode_names = {
         MessageRetrievalMode.MESSAGE_IDS: "message_ids",
         MessageRetrievalMode.REPLIES: "reply",
