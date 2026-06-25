@@ -504,16 +504,22 @@ class TestGetMessagesFromUser:
     """Test from_user parameter for sender filtering."""
 
     @pytest.mark.asyncio
+    @patch("src.tools.search.search_generators.get_entity_by_id", new_callable=AsyncMock)
     @patch("src.tools.search.search_mode.get_connected_client", new_callable=AsyncMock)
     @patch("src.tools.search.search_mode.get_entity_by_id", new_callable=AsyncMock)
     async def test_from_user_passed_to_iter_messages(
-        self, mock_get_entity, mock_get_client
+        self, mock_get_entity, mock_get_client, mock_gen_get_entity
     ):
         """Should pass from_user to client.iter_messages for server-side filtering."""
         mock_entity = Mock()
         mock_entity.id = 123
         mock_entity.broadcast = False
         mock_get_entity.return_value = mock_entity
+
+        # from_user resolves to a user entity via get_entity_by_id
+        mock_user_entity = Mock()
+        mock_user_entity.id = 456
+        mock_gen_get_entity.return_value = mock_user_entity
 
         mock_client = MagicMock()
         mock_client.get_me = AsyncMock(return_value=Mock(premium=False))
@@ -535,20 +541,26 @@ class TestGetMessagesFromUser:
             limit=10,
         )
 
-        # Verify from_user was passed to iter_messages
+        # Verify from_user was resolved and passed to iter_messages
+        mock_gen_get_entity.assert_called_once_with("alice")
         mock_client.iter_messages.assert_called_once()
         call_kwargs = mock_client.iter_messages.call_args
-        assert call_kwargs[1].get("from_user") == "alice"
+        assert call_kwargs[1].get("from_user") is mock_user_entity
 
     @pytest.mark.asyncio
+    @patch("src.tools.search.search_generators.get_entity_by_id", new_callable=AsyncMock)
     @patch("src.tools.search.search_mode.get_connected_client", new_callable=AsyncMock)
     @patch("src.tools.search.search_mode.get_entity_by_id", new_callable=AsyncMock)
-    async def test_from_user_without_query(self, mock_get_entity, mock_get_client):
+    async def test_from_user_without_query(self, mock_get_entity, mock_get_client, mock_gen_get_entity):
         """Should work with from_user only (browse mode with sender filter)."""
         mock_entity = Mock()
         mock_entity.id = 123
         mock_entity.broadcast = False
         mock_get_entity.return_value = mock_entity
+
+        mock_user_entity = Mock()
+        mock_user_entity.id = 456
+        mock_gen_get_entity.return_value = mock_user_entity
 
         mock_client = MagicMock()
         mock_client.get_me = AsyncMock(return_value=Mock(premium=False))
@@ -569,22 +581,28 @@ class TestGetMessagesFromUser:
             limit=10,
         )
 
-        # Verify from_user was passed to iter_messages even without query
+        # Verify from_user was resolved and passed to iter_messages even without query
+        mock_gen_get_entity.assert_called_once_with("alice")
         mock_client.iter_messages.assert_called_once()
         call_kwargs = mock_client.iter_messages.call_args
-        assert call_kwargs[1].get("from_user") == "alice"
+        assert call_kwargs[1].get("from_user") is mock_user_entity
 
     @pytest.mark.asyncio
+    @patch("src.tools.search.search_generators.get_entity_by_id", new_callable=AsyncMock)
     @patch("src.tools.search.search_mode.get_connected_client", new_callable=AsyncMock)
     @patch("src.tools.search.search_mode.get_entity_by_id", new_callable=AsyncMock)
     async def test_from_user_with_query_and_date(
-        self, mock_get_entity, mock_get_client
+        self, mock_get_entity, mock_get_client, mock_gen_get_entity
     ):
         """Should combine from_user with query and date filters."""
         mock_entity = Mock()
         mock_entity.id = 123
         mock_entity.broadcast = False
         mock_get_entity.return_value = mock_entity
+
+        mock_user_entity = Mock()
+        mock_user_entity.id = 456
+        mock_gen_get_entity.return_value = mock_user_entity
 
         mock_client = MagicMock()
         mock_client.get_me = AsyncMock(return_value=Mock(premium=False))
@@ -611,7 +629,7 @@ class TestGetMessagesFromUser:
         assert "messages" in result
         mock_client.iter_messages.assert_called_once()
         call_kwargs = mock_client.iter_messages.call_args
-        assert call_kwargs[1].get("from_user") == "alice"
+        assert call_kwargs[1].get("from_user") is mock_user_entity
 
     @pytest.mark.asyncio
     async def test_from_user_with_message_ids_returns_error(self):

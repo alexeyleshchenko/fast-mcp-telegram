@@ -270,12 +270,39 @@ def is_ambiguous_peer_scalar(value: Any) -> bool:
     return bool(s.startswith("-") and len(s) > 1 and s[1:].isdigit())
 
 
+def _strip_channel_prefix(entity_id: Any) -> tuple[Any, bool]:
+    """Strip the ``-100`` prefix from channel/group IDs.
+
+    Telegram uses ``-100`` prefix for channels/supergroups in some contexts
+    (e.g., ``-1001234567890`` → channel ID ``1234567890``).  This helper
+    returns the raw ID and whether stripping was performed.
+
+    Args:
+        entity_id: A numeric string (``"-100…"``) or int (``-100…``).
+
+    Returns:
+        Tuple of ``(raw_id, was_stripped)``.  *raw_id* is the integer after
+        removing the ``-100`` prefix, or the original value if no prefix was
+        found.  *was_stripped* is ``True`` when the prefix was present.
+    """
+    # String case: "-100…" (must have digits after the prefix)
+    if isinstance(entity_id, str) and entity_id.startswith("-100") and len(entity_id) > 4 and entity_id[1:].isdigit():
+        return int(entity_id[4:]), True
+    # Int case: -100…
+    if isinstance(entity_id, int) and not isinstance(entity_id, bool) and entity_id <= -1000:
+        # Convert to string, strip "-100" prefix, convert back to int
+        s = str(entity_id)  # e.g. "-1001234567890"
+        return int(s[4:]), True  # "1234567890" → 1234567890
+    return entity_id, False
+
+
 async def get_entity_by_id(entity_id, *, client: TelegramClient | None = None):
     """
     A wrapper around client.get_entity to handle numeric strings and log errors.
     Special handling for 'me' identifier for Saved Messages.
     Tries multiple peer types (raw ID, PeerChannel, PeerUser, PeerChat) for better resolution.
     Also resolves Telegram URLs (t.me/…) to peer identifiers when possible.
+    Strips ``-100`` prefix from channel/group IDs for broader resolution.
 
     Args:
         entity_id: Username, ``me``, numeric id, numeric string, or Telegram URL.
@@ -296,6 +323,13 @@ async def get_entity_by_id(entity_id, *, client: TelegramClient | None = None):
                 entity_id = parsed
                 logger.debug("Parsed Telegram URL to peer identifier: %s", entity_id)
 
+        # Strip -100 channel prefix and build candidate list
+        stripped_id, was_stripped = _strip_channel_prefix(entity_id)
+        if was_stripped:
+            logger.debug(
+                "Stripped -100 channel prefix: %r → %d", entity_id, stripped_id
+            )
+
         # Try to convert entity_id to an integer if it's a numeric string
         try:
             peer = int(entity_id)
@@ -306,7 +340,13 @@ async def get_entity_by_id(entity_id, *, client: TelegramClient | None = None):
             raise ValueError("Entity ID cannot be null or empty")
 
         candidates: list = [peer]
-        if isinstance(peer, int):
+        if was_stripped:
+            # Prefer the stripped raw ID first, then PeerChannel with raw ID
+            candidates.append(PeerChannel(stripped_id))
+            # Also try the original numeric ID with all peer types
+            if isinstance(peer, int):
+                candidates.extend([PeerChannel(peer), PeerUser(peer), PeerChat(peer)])
+        elif isinstance(peer, int):
             candidates.extend([PeerChannel(peer), PeerUser(peer), PeerChat(peer)])
 
         last_error: Exception | None = None

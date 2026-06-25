@@ -30,6 +30,17 @@ async def _search_chat_messages_generator(
     from_user=None,
 ):
     """Async generator for per-chat message search."""
+    # Resolve from_user through get_entity_by_id (same as send_message resolves chat_id).
+    # This handles: t.me URLs, "me", numeric strings with multi-peer fallback.
+    resolved_from_user = None
+    if from_user:
+        resolved_from_user = await get_entity_by_id(from_user)
+        if not resolved_from_user:
+            raise ValueError(
+                f"Could not resolve from_user '{from_user}'. "
+                "Supported: username, phone number, t.me URL, numeric ID, or 'me'."
+            )
+
     batch_count = 0
     max_batches = 1 + auto_expand_batches if chat_type else 1
     next_offset_id = 0
@@ -41,7 +52,7 @@ async def _search_chat_messages_generator(
             search=query,
             offset_id=next_offset_id,
             offset_date=max_datetime,
-            from_user=from_user,
+            from_user=resolved_from_user,
         ):
             if not message:
                 continue
