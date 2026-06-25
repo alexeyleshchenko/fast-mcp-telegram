@@ -218,13 +218,16 @@ async def search_messages_impl(
         )
 
     # Validate from_user early
-    if from_user is not None and not from_user.strip():
-        return log_and_build_error(
-            operation="get_messages",
-            error_message="from_user must not be empty",
-            params=params,
-            exception=ValueError("from_user must not be empty"),
-        )
+    if from_user is not None:
+        from_user = from_user.strip()
+        if not from_user:
+            return log_and_build_error(
+                operation="get_messages",
+                error_message="from_user must not be empty",
+                params=params,
+                exception=ValueError("from_user must not be empty"),
+            )
+        params["from_user"] = from_user  # update with stripped value
 
     if from_user and chat_id is None:
         return log_and_build_error(
