@@ -56,6 +56,7 @@ Treat commit messages as hints; validate against actual behavior. Describe what 
 
 - **Primary**: new features, fixes, behavior changes
 - **Omit**: refactoring and internal cleanup unless they are the only changes (still complete docs per section 3)
+- **Grafana, telemetry, and ops dashboards** are internal/ops tooling — never user-facing. Omit from release notes unless they are the only changes.
 - **Fixes vs new work**: Fixes that pertain to features introduced in **this** release go under **New Features** only — never under **Fixes**. **Fixes** = regressions in previously existing features or unrelated bugs. If a new feature has bugs, it's not a "fix" for users, it's just the feature being completed.
 - **Dependencies**: User-visible stack milestones (e.g. FastMCP 3.x) go under **New Features**.
 
