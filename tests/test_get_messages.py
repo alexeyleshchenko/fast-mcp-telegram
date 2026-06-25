@@ -500,6 +500,199 @@ class TestGetMessagesChatFieldIntegration:
             )
 
 
+class TestGetMessagesFromUser:
+    """Test from_user parameter for sender filtering."""
+
+    @pytest.mark.asyncio
+    @patch("src.tools.search.search_generators.get_entity_by_id", new_callable=AsyncMock)
+    @patch("src.tools.search.search_mode.get_connected_client", new_callable=AsyncMock)
+    @patch("src.tools.search.search_mode.get_entity_by_id", new_callable=AsyncMock)
+    async def test_from_user_passed_to_iter_messages(
+        self, mock_get_entity, mock_get_client, mock_gen_get_entity
+    ):
+        """Should pass from_user to client.iter_messages for server-side filtering."""
+        mock_entity = Mock()
+        mock_entity.id = 123
+        mock_entity.broadcast = False
+        mock_get_entity.return_value = mock_entity
+
+        # from_user resolves to a user entity via get_entity_by_id
+        mock_user_entity = Mock()
+        mock_user_entity.id = 456
+        mock_gen_get_entity.return_value = mock_user_entity
+
+        mock_client = MagicMock()
+        mock_client.get_me = AsyncMock(return_value=Mock(premium=False))
+
+        msg = make_mock_message(
+            id=1, text="Hello", date=datetime(2024, 6, 15, tzinfo=UTC)
+        )
+
+        async def mock_iter_messages_gen():
+            yield msg
+
+        mock_client.iter_messages = MagicMock(return_value=mock_iter_messages_gen())
+        mock_get_client.return_value = mock_client
+
+        await search_messages_impl(
+            chat_id="me",
+            query="hello",
+            from_user="alice",
+            limit=10,
+        )
+
+        # Verify from_user was resolved and passed to iter_messages
+        mock_gen_get_entity.assert_called_once_with("alice")
+        mock_client.iter_messages.assert_called_once()
+        call_kwargs = mock_client.iter_messages.call_args
+        assert call_kwargs[1].get("from_user") is mock_user_entity
+
+    @pytest.mark.asyncio
+    @patch("src.tools.search.search_generators.get_entity_by_id", new_callable=AsyncMock)
+    @patch("src.tools.search.search_mode.get_connected_client", new_callable=AsyncMock)
+    @patch("src.tools.search.search_mode.get_entity_by_id", new_callable=AsyncMock)
+    async def test_from_user_without_query(self, mock_get_entity, mock_get_client, mock_gen_get_entity):
+        """Should work with from_user only (browse mode with sender filter)."""
+        mock_entity = Mock()
+        mock_entity.id = 123
+        mock_entity.broadcast = False
+        mock_get_entity.return_value = mock_entity
+
+        mock_user_entity = Mock()
+        mock_user_entity.id = 456
+        mock_gen_get_entity.return_value = mock_user_entity
+
+        mock_client = MagicMock()
+        mock_client.get_me = AsyncMock(return_value=Mock(premium=False))
+
+        msg = make_mock_message(
+            id=1, text="Hello", date=datetime(2024, 6, 15, tzinfo=UTC)
+        )
+
+        async def mock_iter_messages_gen():
+            yield msg
+
+        mock_client.iter_messages = MagicMock(return_value=mock_iter_messages_gen())
+        mock_get_client.return_value = mock_client
+
+        await search_messages_impl(
+            chat_id="me",
+            from_user="alice",
+            limit=10,
+        )
+
+        # Verify from_user was resolved and passed to iter_messages even without query
+        mock_gen_get_entity.assert_called_once_with("alice")
+        mock_client.iter_messages.assert_called_once()
+        call_kwargs = mock_client.iter_messages.call_args
+        assert call_kwargs[1].get("from_user") is mock_user_entity
+
+    @pytest.mark.asyncio
+    @patch("src.tools.search.search_generators.get_entity_by_id", new_callable=AsyncMock)
+    @patch("src.tools.search.search_mode.get_connected_client", new_callable=AsyncMock)
+    @patch("src.tools.search.search_mode.get_entity_by_id", new_callable=AsyncMock)
+    async def test_from_user_with_query_and_date(
+        self, mock_get_entity, mock_get_client, mock_gen_get_entity
+    ):
+        """Should combine from_user with query and date filters."""
+        mock_entity = Mock()
+        mock_entity.id = 123
+        mock_entity.broadcast = False
+        mock_get_entity.return_value = mock_entity
+
+        mock_user_entity = Mock()
+        mock_user_entity.id = 456
+        mock_gen_get_entity.return_value = mock_user_entity
+
+        mock_client = MagicMock()
+        mock_client.get_me = AsyncMock(return_value=Mock(premium=False))
+
+        msg = make_mock_message(
+            id=1, text="Hello", date=datetime(2024, 6, 15, tzinfo=UTC)
+        )
+
+        async def mock_iter_messages_gen():
+            yield msg
+
+        mock_client.iter_messages = MagicMock(return_value=mock_iter_messages_gen())
+        mock_get_client.return_value = mock_client
+
+        result = await search_messages_impl(
+            chat_id="me",
+            query="hello",
+            from_user="alice",
+            min_date="2024-01-01",
+            max_date="2024-12-31",
+            limit=10,
+        )
+
+        assert "messages" in result
+        mock_client.iter_messages.assert_called_once()
+        call_kwargs = mock_client.iter_messages.call_args
+        assert call_kwargs[1].get("from_user") is mock_user_entity
+
+    @pytest.mark.asyncio
+    async def test_from_user_with_message_ids_returns_error(self):
+        """Should reject from_user with message_ids mode."""
+        result = await search_messages_impl(
+            chat_id="me",
+            message_ids=[123],
+            from_user="alice",
+            limit=10,
+        )
+        assert "error" in result
+        assert "from_user is not supported" in result["error"]
+        assert "ids" in result["error"]
+
+    @pytest.mark.asyncio
+    async def test_from_user_with_reply_to_id_returns_error(self):
+        """Should reject from_user with reply_to_id mode."""
+        result = await search_messages_impl(
+            chat_id="me",
+            reply_to_id=456,
+            from_user="alice",
+            limit=10,
+        )
+        assert "error" in result
+        assert "from_user is not supported" in result["error"]
+        assert "reply" in result["error"]
+
+    @pytest.mark.asyncio
+    async def test_from_user_with_global_search_returns_error(self):
+        """Should reject from_user without chat_id (global search)."""
+        result = await search_messages_impl(
+            query="hello",
+            from_user="alice",
+            limit=10,
+        )
+        assert "error" in result
+        assert "from_user requires chat_id" in result["error"]
+
+    @pytest.mark.asyncio
+    async def test_from_user_empty_string_returns_error(self):
+        """Should reject empty string from_user."""
+        result = await search_messages_impl(
+            chat_id="me",
+            query="hello",
+            from_user="",
+            limit=10,
+        )
+        assert "error" in result
+        assert "from_user must not be empty" in result["error"]
+
+    @pytest.mark.asyncio
+    async def test_from_user_whitespace_only_returns_error(self):
+        """Should reject whitespace-only from_user."""
+        result = await search_messages_impl(
+            chat_id="me",
+            query="hello",
+            from_user="   ",
+            limit=10,
+        )
+        assert "error" in result
+        assert "from_user must not be empty" in result["error"]
+
+
 class TestGetMessagesDateFiltering:
     """Test min_date/max_date filtering for per-chat search."""
 

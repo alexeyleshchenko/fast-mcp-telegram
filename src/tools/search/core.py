@@ -26,6 +26,7 @@ def _build_search_params(
     auto_expand_batches: int,
     include_total_count: bool,
     max_concurrent: int | None = None,
+    from_user: str | None = None,
 ) -> dict[str, Any]:
     return {
         "query": query,
@@ -41,6 +42,7 @@ def _build_search_params(
         "auto_expand_batches": auto_expand_batches,
         "include_total_count": include_total_count,
         "max_concurrent": max_concurrent,
+        "from_user": from_user,
         "is_global_search": chat_id is None,
         "has_query": bool(query and query.strip()),
         "has_date_filter": bool(min_date or max_date),
@@ -77,6 +79,7 @@ async def _dispatch_search_mode(
     auto_expand_batches: int,
     include_total_count: bool,
     thread_scope: ThreadScope,
+    from_user: str | None = None,
 ) -> dict[str, Any]:
     if mode is MessageRetrievalMode.MESSAGE_IDS:
         if chat_id is None or message_ids is None:
@@ -99,8 +102,14 @@ async def _dispatch_search_mode(
                 exception=ValueError("Missing required params"),
             )
         return await _handle_reply_mode(
-            chat_id, reply_to_id, limit, query, params, thread_scope,
-            min_date=min_date, max_date=max_date,
+            chat_id,
+            reply_to_id,
+            limit,
+            query,
+            params,
+            thread_scope,
+            min_date=min_date,
+            max_date=max_date,
         )
 
     return await _handle_query_mode(
@@ -114,6 +123,7 @@ async def _dispatch_search_mode(
         auto_expand_batches=auto_expand_batches,
         include_total_count=include_total_count,
         params=params,
+        from_user=from_user,
     )
 
 
@@ -153,6 +163,7 @@ async def search_messages_impl(
     include_total_count: bool = False,
     thread_scope: ThreadScope = "auto",
     max_concurrent: int | None = _DEFAULT_MAX_CONCURRENT,
+    from_user: str | None = None,
 ) -> dict[str, Any]:
     """
     Unified message retrieval: search, browse, read by IDs, or list replies.
@@ -163,6 +174,8 @@ async def search_messages_impl(
 
     Args:
         max_concurrent: Max parallel SearchGlobal requests (default: 2).
+        from_user: Sender filter (per-chat only). Accepts user id, @username,
+            phone, or 'me'. Uses Telegram's native from_id server-side filter.
     """
     params = _build_search_params(
         query=query,
@@ -178,6 +191,7 @@ async def search_messages_impl(
         auto_expand_batches=auto_expand_batches,
         include_total_count=include_total_count,
         max_concurrent=max_concurrent,
+        from_user=from_user,
     )
 
     if thread_scope in ("full", "direct") and reply_to_id is None:
@@ -203,6 +217,39 @@ async def search_messages_impl(
             exception=e,
         )
 
+    # Validate from_user early
+    if from_user is not None:
+        from_user = from_user.strip()
+        if not from_user:
+            return log_and_build_error(
+                operation="get_messages",
+                error_message="from_user must not be empty",
+                params=params,
+                exception=ValueError("from_user must not be empty"),
+            )
+        params["from_user"] = from_user  # update with stripped value
+
+    if from_user and chat_id is None:
+        return log_and_build_error(
+            operation="get_messages",
+            error_message="from_user requires chat_id; it only works with per-chat search",
+            params=params,
+            exception=ValueError("from_user requires chat_id"),
+        )
+
+    mode_names = {
+        MessageRetrievalMode.MESSAGE_IDS: "message_ids",
+        MessageRetrievalMode.REPLIES: "reply",
+    }
+    if from_user and mode in mode_names:
+        mode_name = mode_names[mode]
+        return log_and_build_error(
+            operation="get_messages",
+            error_message=f"from_user is not supported with {mode_name} mode; it only works with per-chat search (chat_id + query or chat_id alone)",
+            params=params,
+            exception=ValueError(f"from_user incompatible with {mode_name} mode"),
+        )
+
     return await _dispatch_search_mode(
         mode,
         params,
@@ -218,4 +265,5 @@ async def search_messages_impl(
         auto_expand_batches=auto_expand_batches,
         include_total_count=include_total_count,
         thread_scope=thread_scope,
+        from_user=from_user,
     )

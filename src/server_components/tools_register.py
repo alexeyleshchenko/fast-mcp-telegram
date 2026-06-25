@@ -21,6 +21,7 @@ from src.server_components.mcp_tool_types import (
     ContactLastName,
     FilesListParam,
     FilterParam,
+    FromUser,
     IncludeTotalCount,
     LimitChats,
     LimitMessages,
@@ -85,6 +86,7 @@ _DESC_SEARCH_GLOBAL = _tool_description(
 _DESC_GET_MESSAGES = _tool_description(
     "Read or search messages in one chat: browse latest, search text, fetch by ids, "
     "or load replies to a message (comments, forum topics, threads). "
+    "Use from_user to filter by sender (server-side, per-chat only). "
     "Do not combine message_ids with query or reply_to_id. "
     "Success: messages, has_more, optional total_count and discussion fields. "
 )
@@ -113,6 +115,7 @@ _DESC_EDIT_MESSAGE = _tool_description(
 
 _DESC_FIND_CHATS = _tool_description(
     "Find users/groups/channels by name, username, or phone. "
+    "Comma-separated usernames are searched in parallel and results are merged round-robin. "
     "Global search (query required) searches all Telegram; "
     "with min_date, max_date, or filter, search uses dialog list or a named filter; "
     "include_peers filters use last-activity from GetPeerDialogs; flag-based filters use dialog list dates. "
@@ -281,6 +284,7 @@ def register_tools(mcp: FastMCP) -> None:
         limit: LimitMessages = 50,
         min_date: MinDate = None,
         max_date: MaxDate = None,
+        from_user: FromUser = None,
         auto_expand_batches: AutoExpandBatches = 2,
         include_total_count: IncludeTotalCount = False,
     ) -> SearchResult:
@@ -297,6 +301,7 @@ def register_tools(mcp: FastMCP) -> None:
             auto_expand_batches=auto_expand_batches,
             include_total_count=include_total_count,
             thread_scope=thread_scope,
+            from_user=from_user,
         )
 
     @mcp.tool(

@@ -171,6 +171,7 @@ async def _collect_messages_in_chat(
     collected: list[dict[str, Any]],
     seen_keys: set[Any],
     include_chat_entity: bool = False,
+    from_user: str | None = None,
 ) -> int | None:
     entity = await get_entity_by_id(chat_id)
     if not entity:
@@ -188,6 +189,7 @@ async def _collect_messages_in_chat(
             public,
             auto_expand_batches,
             include_chat_entity,
+            from_user=from_user,
         )
         for q in per_chat_queries
     ]
@@ -328,6 +330,7 @@ async def _handle_query_mode(
     auto_expand_batches: int,
     include_total_count: bool,
     params: dict[str, Any],
+    from_user: str | None = None,
 ) -> dict[str, Any]:
     """Handle search/browse mode for messages (MessageRetrievalMode.SEARCH)."""
     queries: list[str] = (
@@ -402,6 +405,7 @@ async def _handle_query_mode(
                     collected,
                     seen_keys,
                     include_chat_entity=False,
+                    from_user=from_user,
                 )
             except Exception as e:
                 return _connection_error_or_build(
