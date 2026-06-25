@@ -10,6 +10,7 @@ Telegram search has specific limitations that AI models should understand to pro
 - **Multiple terms**: `"deadline, meeting, project"` (comma-separated)
 - **Partial words**: `"proj"` (finds "project", "projects", etc.)
 - **Case insensitive**: `"DEADLINE"` finds "deadline", "Deadline", etc.
+- **Sender filter**: `from_user` parameter filters by sender server-side (per-chat only)
 
 ## What Doesn't Work ❌
 
@@ -17,6 +18,7 @@ Telegram search has specific limitations that AI models should understand to pro
 - **Regex patterns**: `"^project"`, `"deadline$"`, `"proj.*"`
 - **Boolean operators**: `"project AND deadline"`, `"meeting OR call"`
 - **Quotes for exact phrases**: `"exact phrase"` (treated as separate words)
+- **Sender names in query**: `query="Букрей"` does NOT search sender names — use `from_user` instead
 
 ## Best Practices 💡
 
@@ -27,6 +29,27 @@ Telegram search has specific limitations that AI models should understand to pro
 - Use chat-specific search when possible for better results
 
 ## Search Examples
+
+### Sender-Specific Searches
+
+```json
+// ✅ Good: Filter by sender name (server-side, per-chat only)
+{"tool": "get_messages", "params": {"chat_id": "-1001234567890", "from_user": "alice", "limit": 20}}
+
+// ✅ Good: Search text + sender filter
+{"tool": "get_messages", "params": {"chat_id": "-1001234567890", "query": "docs.google.com", "from_user": "Букрей", "limit": 20}}
+
+// ✅ Good: Browse messages from specific sender with date range
+{"tool": "get_messages", "params": {"chat_id": "-1001234567890", "from_user": "@username", "min_date": "2025-01-01", "limit": 50}}
+
+// ❌ Bad: Sender names in query don't work
+{"tool": "get_messages", "params": {"chat_id": "-1001234567890", "query": "Букрей"}}
+
+// ❌ Bad: from_user not supported in global search
+{"tool": "search_messages_globally", "params": {"query": "hello", "from_user": "alice"}}
+```
+
+**Note:** `from_user` uses Telegram's native `from_id` filter — zero extra latency, server-side filtering. Only works with per-chat search (`get_messages` with `chat_id`). For global search, results must be filtered client-side.
 
 ### Global Search Examples
 

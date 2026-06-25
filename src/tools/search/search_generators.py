@@ -27,6 +27,7 @@ async def _search_chat_messages_generator(
     public,
     auto_expand_batches,
     include_chat_entity=False,
+    from_user=None,
 ):
     """Async generator for per-chat message search."""
     batch_count = 0
@@ -36,7 +37,11 @@ async def _search_chat_messages_generator(
     while batch_count < max_batches:
         last_id = None
         async for message in client.iter_messages(
-            entity, search=query, offset_id=next_offset_id, offset_date=max_datetime
+            entity,
+            search=query,
+            offset_id=next_offset_id,
+            offset_date=max_datetime,
+            from_user=from_user,
         ):
             if not message:
                 continue

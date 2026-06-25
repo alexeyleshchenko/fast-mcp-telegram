@@ -223,6 +223,7 @@ get_messages(
   limit?: number = 50,           // Max results
   min_date?: string,             // ISO date filter (search, browse, and reply/forum-topic modes)
   max_date?: string,             // ISO date filter (search, browse, and reply/forum-topic modes)
+  from_user?: string,            // Sender filter: user id, @username, phone, 'me' (per-chat only)
   auto_expand_batches?: number = 2,  // Extra batches for filtered searches
   include_total_count?: boolean = false  // Include total count (chat search only)
 )

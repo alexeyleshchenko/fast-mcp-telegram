@@ -500,6 +500,124 @@ class TestGetMessagesChatFieldIntegration:
             )
 
 
+class TestGetMessagesFromUser:
+    """Test from_user parameter for sender filtering."""
+
+    @pytest.mark.asyncio
+    @patch("src.tools.search.search_mode.get_connected_client", new_callable=AsyncMock)
+    @patch("src.tools.search.search_mode.get_entity_by_id", new_callable=AsyncMock)
+    async def test_from_user_passed_to_iter_messages(
+        self, mock_get_entity, mock_get_client
+    ):
+        """Should pass from_user to client.iter_messages for server-side filtering."""
+        mock_entity = Mock()
+        mock_entity.id = 123
+        mock_entity.broadcast = False
+        mock_get_entity.return_value = mock_entity
+
+        mock_client = MagicMock()
+        mock_client.get_me = AsyncMock(return_value=Mock(premium=False))
+
+        msg = make_mock_message(
+            id=1, text="Hello", date=datetime(2024, 6, 15, tzinfo=UTC)
+        )
+
+        async def mock_iter_messages_gen():
+            yield msg
+
+        mock_client.iter_messages = MagicMock(return_value=mock_iter_messages_gen())
+        mock_get_client.return_value = mock_client
+
+        result = await search_messages_impl(
+            chat_id="me",
+            query="hello",
+            from_user="alice",
+            limit=10,
+        )
+
+        # Verify from_user was passed to iter_messages
+        mock_client.iter_messages.assert_called_once()
+        call_kwargs = mock_client.iter_messages.call_args
+        assert call_kwargs[1].get("from_user") == "alice" or (
+            len(call_kwargs[0]) > 2 and call_kwargs[0][2] == "alice"
+        )
+
+    @pytest.mark.asyncio
+    @patch("src.tools.search.search_mode.get_connected_client", new_callable=AsyncMock)
+    @patch("src.tools.search.search_mode.get_entity_by_id", new_callable=AsyncMock)
+    async def test_from_user_without_query(
+        self, mock_get_entity, mock_get_client
+    ):
+        """Should work with from_user only (browse mode with sender filter)."""
+        mock_entity = Mock()
+        mock_entity.id = 123
+        mock_entity.broadcast = False
+        mock_get_entity.return_value = mock_entity
+
+        mock_client = MagicMock()
+        mock_client.get_me = AsyncMock(return_value=Mock(premium=False))
+
+        msg = make_mock_message(
+            id=1, text="Hello", date=datetime(2024, 6, 15, tzinfo=UTC)
+        )
+
+        async def mock_iter_messages_gen():
+            yield msg
+
+        mock_client.iter_messages = MagicMock(return_value=mock_iter_messages_gen())
+        mock_get_client.return_value = mock_client
+
+        result = await search_messages_impl(
+            chat_id="me",
+            from_user="alice",
+            limit=10,
+        )
+
+        assert "messages" in result
+        assert len(result["messages"]) == 1
+
+    @pytest.mark.asyncio
+    @patch("src.tools.search.search_mode.get_connected_client", new_callable=AsyncMock)
+    @patch("src.tools.search.search_mode.get_entity_by_id", new_callable=AsyncMock)
+    async def test_from_user_with_query_and_date(
+        self, mock_get_entity, mock_get_client
+    ):
+        """Should combine from_user with query and date filters."""
+        mock_entity = Mock()
+        mock_entity.id = 123
+        mock_entity.broadcast = False
+        mock_get_entity.return_value = mock_entity
+
+        mock_client = MagicMock()
+        mock_client.get_me = AsyncMock(return_value=Mock(premium=False))
+
+        msg = make_mock_message(
+            id=1, text="Hello", date=datetime(2024, 6, 15, tzinfo=UTC)
+        )
+
+        async def mock_iter_messages_gen():
+            yield msg
+
+        mock_client.iter_messages = MagicMock(return_value=mock_iter_messages_gen())
+        mock_get_client.return_value = mock_client
+
+        result = await search_messages_impl(
+            chat_id="me",
+            query="hello",
+            from_user="alice",
+            min_date="2024-01-01",
+            max_date="2024-12-31",
+            limit=10,
+        )
+
+        assert "messages" in result
+        mock_client.iter_messages.assert_called_once()
+        call_kwargs = mock_client.iter_messages.call_args
+        assert call_kwargs[1].get("from_user") == "alice" or (
+            len(call_kwargs[0]) > 2 and call_kwargs[0][2] == "alice"
+        )
+
+
 class TestGetMessagesDateFiltering:
     """Test min_date/max_date filtering for per-chat search."""
 
