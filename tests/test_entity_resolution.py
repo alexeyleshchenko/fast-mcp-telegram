@@ -162,3 +162,24 @@ async def test_get_entity_by_id_no_prefix(mock_get_client):
     calls = mock_client.get_entity.call_args_list
     assert len(calls) == 1  # first call succeeded
     assert calls[0][0][0] == 1234567890
+
+
+@pytest.mark.asyncio
+@patch("src.utils.entity.get_connected_client", new_callable=AsyncMock)
+async def test_get_entity_by_id_phone_not_converted_to_int(mock_get_client):
+    """Phone numbers starting with '+' must NOT be int()-converted — that produces a wrong user ID."""
+    mock_client = MagicMock()
+    mock_user = MagicMock(id=987654321)
+    mock_client.get_entity = AsyncMock(return_value=mock_user)
+    mock_get_client.return_value = mock_client
+
+    from src.utils.entity import get_entity_by_id
+
+    result = await get_entity_by_id("+15551234567")
+    assert result is not None
+    assert result.id == 987654321
+
+    # The phone string should be passed directly to get_entity — NOT int(15551234567)
+    calls = mock_client.get_entity.call_args_list
+    assert len(calls) == 1
+    assert calls[0][0][0] == "+15551234567"  # string, not int

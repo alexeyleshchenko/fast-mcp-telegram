@@ -341,11 +341,15 @@ async def get_entity_by_id(entity_id, *, client: TelegramClient | None = None):
                 "Stripped -100 channel prefix: %r → %d", entity_id, stripped_id
             )
 
-        # Try to convert entity_id to an integer if it's a numeric string
-        try:
-            peer = int(entity_id)
-        except (ValueError, TypeError):
+        # Try to convert entity_id to an integer if it's a numeric string.
+        # Skip for phone numbers — int("+123…") succeeds but produces a wrong user ID.
+        if isinstance(entity_id, str) and entity_id.startswith("+"):
             peer = entity_id
+        else:
+            try:
+                peer = int(entity_id)
+            except (ValueError, TypeError):
+                peer = entity_id
 
         if not peer:
             raise ValueError("Entity ID cannot be null or empty")
