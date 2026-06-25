@@ -76,6 +76,30 @@ class TestStripChannelPrefix:
         assert raw == "-100"
         assert was_stripped is False
 
+    def test_int_non_channel_negative(self):
+        """Int -1234 → (-1234, False) — not a -100 prefix, just a regular negative ID."""
+        raw, was_stripped = _strip_channel_prefix(-1234)
+        assert raw == -1234
+        assert was_stripped is False
+
+    def test_int_large_non_channel_negative(self):
+        """Int -5000000 → (-5000000, False) — not a -100 prefix."""
+        raw, was_stripped = _strip_channel_prefix(-5000000)
+        assert raw == -5000000
+        assert was_stripped is False
+
+    def test_string_minus_1000_strips_to_zero(self):
+        """String '-1000' → ('-1000', False) — would strip to 0, which is invalid."""
+        raw, was_stripped = _strip_channel_prefix("-1000")
+        assert raw == "-1000"
+        assert was_stripped is False
+
+    def test_int_minus_1000_strips_to_zero(self):
+        """Int -1000 → (-1000, False) — would strip to 0, which is invalid."""
+        raw, was_stripped = _strip_channel_prefix(-1000)
+        assert raw == -1000
+        assert was_stripped is False
+
 
 @pytest.mark.asyncio
 @patch("src.utils.entity.get_connected_client", new_callable=AsyncMock)

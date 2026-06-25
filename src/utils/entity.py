@@ -286,13 +286,24 @@ def _strip_channel_prefix(entity_id: Any) -> tuple[Any, bool]:
         found.  *was_stripped* is ``True`` when the prefix was present.
     """
     # String case: "-100…" (must have digits after the prefix)
-    if isinstance(entity_id, str) and entity_id.startswith("-100") and len(entity_id) > 4 and entity_id[1:].isdigit():
-        return int(entity_id[4:]), True
-    # Int case: -100…
-    if isinstance(entity_id, int) and not isinstance(entity_id, bool) and entity_id <= -1000:
-        # Convert to string, strip "-100" prefix, convert back to int
-        s = str(entity_id)  # e.g. "-1001234567890"
-        return int(s[4:]), True  # "1234567890" → 1234567890
+    if (
+        isinstance(entity_id, str)
+        and entity_id.startswith("-100")
+        and len(entity_id) > 4
+        and entity_id[1:].isdigit()
+    ):
+        stripped = int(entity_id[4:])
+        return (stripped, True) if stripped > 0 else (entity_id, False)
+    # Int case: -100… (bool is subclass of int, so exclude it)
+    if (
+        isinstance(entity_id, int)
+        and not isinstance(entity_id, bool)
+        and entity_id <= -1000
+    ):
+        s = str(entity_id)
+        if s.startswith("-100"):  # verify prefix — don't corrupt IDs like -1234
+            stripped = int(s[4:])
+            return (stripped, True) if stripped > 0 else (entity_id, False)
     return entity_id, False
 
 
@@ -341,12 +352,9 @@ async def get_entity_by_id(entity_id, *, client: TelegramClient | None = None):
 
         candidates: list = [peer]
         if was_stripped:
-            # Prefer the stripped raw ID first, then PeerChannel with raw ID
+            # Prefer stripped raw channel ID first
             candidates.append(PeerChannel(stripped_id))
-            # Also try the original numeric ID with all peer types
-            if isinstance(peer, int):
-                candidates.extend([PeerChannel(peer), PeerUser(peer), PeerChat(peer)])
-        elif isinstance(peer, int):
+        if isinstance(peer, int):
             candidates.extend([PeerChannel(peer), PeerUser(peer), PeerChat(peer)])
 
         last_error: Exception | None = None
