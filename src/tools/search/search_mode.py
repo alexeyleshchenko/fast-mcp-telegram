@@ -29,7 +29,8 @@ from src.utils.message_format import (
 
 from . import results
 from .forum_replies import _get_messages_by_ids_batched
-from .replies import _fetch_direct_replies
+from .replies import _fetch_direct_replies, _fetch_replies
+from .types import ThreadScope
 from .search_generators import _search_chat_messages_generator
 
 logger = logging.getLogger(__name__)
@@ -233,13 +234,14 @@ async def _enrich_with_context(
             elif reply_fetch_count < _CONTEXT_MAX_REPLY_FETCHES:
                 reply_fetch_count += 1
                 try:
-                    replies = await _fetch_direct_replies(
+                    replies, _disc_meta = await _fetch_replies(
                         client,
                         entity,
                         msg_id,
                         _CONTEXT_REPLY_LIMIT,
-                        None,
-                        False,
+                        query=None,
+                        include_chat_entity=False,
+                        thread_scope="auto",
                     )
                     ctx["replies"] = [
                         _lightweight_from_result(r)

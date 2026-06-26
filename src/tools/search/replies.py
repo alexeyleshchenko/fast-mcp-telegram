@@ -26,6 +26,25 @@ from .types import ThreadScope
 logger = logging.getLogger(__name__)
 
 
+async def _find_topic_from_nearby_messages(
+    client, entity, msg_id: int
+) -> int | None:
+    """Find topic ID by checking a nearby message's reply_to_top_id.
+
+    In forum groups, standalone messages may lack reply_to_top_id, but the
+    next message in the same topic usually has it. This heuristic resolves
+    the topic ID so _collect_forum_anchor_replies can do a proper
+    topic_search_request instead of falling back to broken GetRepliesRequest.
+    """
+    nearby = await client.get_messages(entity, ids=msg_id + 1)
+    if not nearby:
+        return None
+    reply_to = getattr(nearby, "reply_to", None)
+    if reply_to:
+        return getattr(reply_to, "reply_to_top_id", None)
+    return None
+
+
 async def _load_reply_anchor(client, entity, reply_to_id: int) -> Any:
     message = await client.get_messages(entity, ids=reply_to_id)
     if not message:
@@ -203,19 +222,45 @@ async def _fetch_replies(
                 )
             except ForumAnchorNotInTopicError:
                 logger.debug(
-                    "Anchor %s is not in-topic; trying GetReplies for topic id",
+                    "Anchor %s is not in-topic; resolving topic from nearby messages",
                     effective_reply_to,
                 )
-                collected = await _fetch_direct_replies(
-                    client,
-                    effective_entity,
-                    effective_reply_to,
-                    limit,
-                    query,
-                    include_chat_entity,
-                    min_date=min_date,
-                    max_date=max_date,
+                topic_id = await _find_topic_from_nearby_messages(
+                    client, effective_entity, effective_reply_to
                 )
+                if topic_id:
+                    logger.debug(
+                        "Resolved topic %d for anchor %d",
+                        topic_id,
+                        effective_reply_to,
+                    )
+                    collected = await _collect_forum_anchor_replies(
+                        client,
+                        effective_entity,
+                        anchor_message,
+                        topic_id,
+                        limit,
+                        query,
+                        include_chat_entity,
+                        include_nested=thread_scope == "full",
+                        min_date=min_date,
+                        max_date=max_date,
+                    )
+                else:
+                    logger.debug(
+                        "Could not resolve topic for %d; falling back to GetReplies",
+                        effective_reply_to,
+                    )
+                    collected = await _fetch_direct_replies(
+                        client,
+                        effective_entity,
+                        effective_reply_to,
+                        limit,
+                        query,
+                        include_chat_entity,
+                        min_date=min_date,
+                        max_date=max_date,
+                    )
         else:
             collected = await _fetch_direct_replies(
                 client,

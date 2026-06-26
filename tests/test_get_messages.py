@@ -1248,7 +1248,7 @@ class TestGetMessagesContext:
         assert ctx["reply_to"]["text"] == "original message"
 
     @pytest.mark.asyncio
-    @patch("src.tools.search.search_mode._fetch_direct_replies", new_callable=AsyncMock)
+    @patch("src.tools.search.search_mode._fetch_replies", new_callable=AsyncMock)
     @patch("src.tools.search.search_mode._get_messages_by_ids_batched", new_callable=AsyncMock)
     @patch("src.tools.search.search_mode.get_entity_by_id", new_callable=AsyncMock)
     @patch("src.tools.search.core.get_entity_by_id", new_callable=AsyncMock)
@@ -1288,7 +1288,7 @@ class TestGetMessagesContext:
 
         mock_client.iter_messages = MagicMock(return_value=mock_iter())
 
-        def make_raw_msg(mid, text, reply_count=0):
+        def make_raw_msg(mid, text):
             m = MagicMock()
             m.id = mid
             m.text = text
@@ -1299,23 +1299,21 @@ class TestGetMessagesContext:
             m.media = None
             m.reply_to = None
             m.reply_to_msg_id = None
-            if reply_count > 0:
-                m.replies = MagicMock()
-                m.replies.replies = reply_count
-            else:
-                m.replies = None
             return m
 
         fetched = [
-            make_raw_msg(500, "popular message", reply_count=3),
+            make_raw_msg(500, "popular message"),
         ]
         mock_batched.return_value = fetched
 
-        # Mock _fetch_direct_replies returns result dicts
-        mock_fetch_replies.return_value = [
-            {"id": 501, "text": "reply 1", "date": "2024-06-15T00:00:00", "sender": {"id": 10}},
-            {"id": 502, "text": "reply 2", "date": "2024-06-15T00:01:00", "sender": {"id": 11}},
-        ]
+        # Mock _fetch_replies returns (collected, discussion_metadata) tuple
+        mock_fetch_replies.return_value = (
+            [
+                {"id": 501, "text": "reply 1", "date": "2024-06-15T00:00:00", "sender": {"id": 10}},
+                {"id": 502, "text": "reply 2", "date": "2024-06-15T00:01:00", "sender": {"id": 11}},
+            ],
+            None,
+        )
 
         result = await search_messages_impl(
             chat_id="me",
