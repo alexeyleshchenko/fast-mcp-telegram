@@ -39,10 +39,22 @@ async def _find_topic_from_nearby_messages(
     do a proper topic_search_request instead of falling back to broken
     GetRepliesRequest.
     """
-    nearby = await client.get_messages(entity, ids=msg_id + 1)
-    if not nearby:
+    # Fetch via range — single-ID get_messages strips reply_to metadata
+    # in Telethon, but range/history fetches preserve it.
+    nearby_msgs = await client.get_messages(entity, limit=3, offset_id=msg_id + 1)
+    if not nearby_msgs:
         return None
-    return _extract_topic_metadata(nearby).get("topic_id")
+    for nearby in nearby_msgs:
+        meta = _extract_topic_metadata(nearby)
+        if meta.get("topic_id") is not None:
+            logger.debug(
+                "Nearby msg %d resolved topic %d (forum_topic=%s)",
+                nearby.id, meta["topic_id"],
+                getattr(getattr(nearby, "reply_to", None), "forum_topic", None),
+            )
+            return meta["topic_id"]
+    logger.debug("No topic found in %d nearby messages after %d", len(nearby_msgs), msg_id)
+    return None
 
 
 async def _load_reply_anchor(client, entity, reply_to_id: int) -> Any:
