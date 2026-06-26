@@ -10,6 +10,9 @@ Schema:
     payload         JSONB — the full nested payload from the client
     payload_hash    TEXT — SHA-256 of canonicalized payload (indexed)
     source_ip_hash  TEXT — SHA-256 of the request source IP
+
+Also bootstraps a `releases` table populated by scripts/sync_releases.py
+and queried by the Grafana release annotations.
 """
 
 from __future__ import annotations
@@ -35,10 +38,23 @@ CREATE TABLE IF NOT EXISTS telemetry (
 );
 """
 
+_SQL_CREATE_RELEASES_TABLE = """
+CREATE TABLE IF NOT EXISTS releases (
+    tag_name        TEXT PRIMARY KEY,
+    release_name    TEXT NOT NULL,
+    published_at    TIMESTAMPTZ NOT NULL,
+    is_prerelease   BOOLEAN NOT NULL DEFAULT FALSE,
+    html_url        TEXT,
+    body            TEXT,
+    synced_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+"""
+
 _SQL_INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_telemetry_instance_id ON telemetry(instance_id)",
     "CREATE INDEX IF NOT EXISTS idx_telemetry_received_at ON telemetry(received_at)",
     "CREATE INDEX IF NOT EXISTS idx_telemetry_payload_hash ON telemetry(payload_hash)",
+    "CREATE INDEX IF NOT EXISTS idx_releases_published_at ON releases(published_at)",
 ]
 
 # TCP keepalive options — prevent PostgreSQL from silently dropping idle connections.
@@ -70,10 +86,11 @@ class PgStorage:
     # ---- lifecycle ----
 
     def connect(self) -> None:
-        """Create connection and ensure table exists."""
+        """Create connection and ensure tables exist."""
         self._conn = psycopg2.connect(self._dsn, **_KEEPALIVES)
         with self._conn.cursor() as cur:
             cur.execute(_SQL_CREATE_TABLE)
+            cur.execute(_SQL_CREATE_RELEASES_TABLE)
             for idx in _SQL_INDEXES:
                 cur.execute(idx)
         self._conn.commit()

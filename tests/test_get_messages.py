@@ -1659,26 +1659,3 @@ class TestGetMessagesContextHelpers:
 
         result = _lightweight_from_result(result_dict)
         assert result["sender_id"] is None
-
-    def test_get_reply_count_with_replies(self):
-        """Should return reply count from raw message."""
-        from src.tools.search.search_mode import _get_reply_count
-
-        msg = MagicMock()
-        msg.replies = MagicMock()
-        msg.replies.replies = 5
-        assert _get_reply_count(msg) == 5
-
-    def test_get_reply_count_no_replies(self):
-        """Should return 0 when message has no replies."""
-        from src.tools.search.search_mode import _get_reply_count
-
-        msg = MagicMock()
-        msg.replies = None
-        assert _get_reply_count(msg) == 0
-
-    def test_get_reply_count_none_message(self):
-        """Should return 0 for None message."""
-        from src.tools.search.search_mode import _get_reply_count
-
-        assert _get_reply_count(None) == 0

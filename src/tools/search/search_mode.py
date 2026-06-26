@@ -93,16 +93,6 @@ def _lightweight_from_result(result: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _get_reply_count(message) -> int:
-    """Get reply count from a raw Telethon message's replies attribute."""
-    if not message:
-        return 0
-    replies = getattr(message, "replies", None)
-    if not replies:
-        return 0
-    return getattr(replies, "replies", 0) or 0
-
-
 async def _enrich_with_context(
     client,
     entity,
@@ -240,37 +230,34 @@ async def _enrich_with_context(
             if time.monotonic() - start_time > _CONTEXT_TIMEOUT_BUDGET:
                 logger.warning("Context enrichment: timeout before reply fetches, skipping remaining")
                 ctx["replies"] = []
-            else:
-                raw_result = fetched.get(msg_id)
-                reply_count = _get_reply_count(raw_result)
-                if reply_count > 0 and reply_fetch_count < _CONTEXT_MAX_REPLY_FETCHES:
-                    reply_fetch_count += 1
-                    try:
-                        replies = await _fetch_direct_replies(
-                            client,
-                            entity,
-                            msg_id,
-                            _CONTEXT_REPLY_LIMIT,
-                            None,
-                            False,
-                        )
-                        ctx["replies"] = [
-                            _lightweight_from_result(r)
-                            for r in replies[:_CONTEXT_REPLY_LIMIT]
-                        ]
-                    except FloodWaitError as e:
-                        wait = getattr(e, "seconds", 0) or 0
-                        logger.warning(
-                            "Reply fetch FloodWaitError for msg %d: wait %ds",
-                            msg_id,
-                            wait,
-                        )
-                        ctx["replies"] = []
-                    except Exception as e:
-                        logger.warning("Reply fetch failed for msg %d: %s", msg_id, e)
-                        ctx["replies"] = []
-                else:
+            elif reply_fetch_count < _CONTEXT_MAX_REPLY_FETCHES:
+                reply_fetch_count += 1
+                try:
+                    replies = await _fetch_direct_replies(
+                        client,
+                        entity,
+                        msg_id,
+                        _CONTEXT_REPLY_LIMIT,
+                        None,
+                        False,
+                    )
+                    ctx["replies"] = [
+                        _lightweight_from_result(r)
+                        for r in replies[:_CONTEXT_REPLY_LIMIT]
+                    ]
+                except FloodWaitError as e:
+                    wait = getattr(e, "seconds", 0) or 0
+                    logger.warning(
+                        "Reply fetch FloodWaitError for msg %d: wait %ds",
+                        msg_id,
+                        wait,
+                    )
                     ctx["replies"] = []
+                except Exception as e:
+                    logger.warning("Reply fetch failed for msg %d: %s", msg_id, e)
+                    ctx["replies"] = []
+            else:
+                ctx["replies"] = []
 
         if ctx:
             msg["context"] = ctx

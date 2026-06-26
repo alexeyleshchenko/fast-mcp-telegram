@@ -1,3 +1,0 @@
-rule_settings:
-  disable:
-    - no-conditionals-in-tests
