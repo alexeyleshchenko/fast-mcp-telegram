@@ -29,20 +29,19 @@ logger = logging.getLogger(__name__)
 async def _find_topic_from_nearby_messages(
     client, entity, msg_id: int
 ) -> int | None:
-    """Find topic ID by checking a nearby message's reply_to_top_id.
+    """Find topic ID by checking a nearby message's topic metadata.
 
     In forum groups, standalone messages may lack reply_to_top_id, but the
-    next message in the same topic usually has it. This heuristic resolves
-    the topic ID so _collect_forum_anchor_replies can do a proper
-    topic_search_request instead of falling back to broken GetRepliesRequest.
+    next message in the same topic usually has it (either via reply_to_top_id
+    or via forum_topic=True with reply_to_msg_id pointing to the topic starter).
+    This heuristic resolves the topic ID so _collect_forum_anchor_replies can
+    do a proper topic_search_request instead of falling back to broken
+    GetRepliesRequest.
     """
     nearby = await client.get_messages(entity, ids=msg_id + 1)
     if not nearby:
         return None
-    reply_to = getattr(nearby, "reply_to", None)
-    if reply_to:
-        return getattr(reply_to, "reply_to_top_id", None)
-    return None
+    return _extract_topic_metadata(nearby).get("topic_id")
 
 
 async def _load_reply_anchor(client, entity, reply_to_id: int) -> Any:
