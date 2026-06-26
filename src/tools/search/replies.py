@@ -17,6 +17,7 @@ from . import results
 from .forum_replies import (
     ForumAnchorNotInTopicError,
     _collect_forum_anchor_replies,
+    _extract_topic_metadata,
     _forum_topic_id_from_anchor,
     _is_forum_topic_id,
 )
