@@ -181,7 +181,6 @@ async def _enrich_with_context(
             fetched[m.id] = m
 
     # Step 3: Build context envelopes
-    reply_fetch_count = 0
     timed_out = False
 
     for msg in messages:
@@ -226,43 +225,76 @@ async def _enrich_with_context(
         else:
             ctx["reply_to"] = None
 
-        # Reply threads — check timeout before each individual fetch
+        # Reply threads — collect for parallel execution below
         if include_reply_threads:
-            if time.monotonic() - start_time > _CONTEXT_TIMEOUT_BUDGET:
-                logger.warning("Context enrichment: timeout before reply fetches, skipping remaining")
-                ctx["replies"] = []
-            elif reply_fetch_count < _CONTEXT_MAX_REPLY_FETCHES:
-                reply_fetch_count += 1
+            ctx["replies"] = []  # placeholder; populated after parallel fetch
+
+        if ctx:
+            msg["context"] = ctx
+
+    # Step 4: Parallel reply thread fetches
+    if include_reply_threads:
+        reply_tasks: list[tuple[int, int]] = []  # (msg_index, msg_id)
+        for i, msg in enumerate(messages[:_CONTEXT_MAX_REPLY_FETCHES]):
+            msg_id = msg.get("id")
+            if msg_id:
+                reply_tasks.append((i, msg_id))
+
+        if reply_tasks:
+            reply_start = time.monotonic()
+
+            async def _fetch_one_reply(idx: int, mid: int) -> tuple[int, list]:
                 try:
-                    replies, _disc_meta = await _fetch_replies(
-                        client,
-                        entity,
-                        msg_id,
-                        _CONTEXT_REPLY_LIMIT,
-                        query=None,
-                        include_chat_entity=False,
-                        thread_scope="auto",
-                    )
-                    ctx["replies"] = [
-                        _lightweight_from_result(r)
-                        for r in replies[:_CONTEXT_REPLY_LIMIT]
-                    ]
+                    async with asyncio.timeout(
+                        max(1, _CONTEXT_TIMEOUT_BUDGET - (reply_start - start_time))
+                    ):
+                        replies, _disc_meta = await _fetch_replies(
+                            client,
+                            entity,
+                            mid,
+                            _CONTEXT_REPLY_LIMIT,
+                            query=None,
+                            include_chat_entity=False,
+                            thread_scope="auto",
+                        )
+                        return idx, [
+                            _lightweight_from_result(r)
+                            for r in replies[:_CONTEXT_REPLY_LIMIT]
+                        ]
+                except (asyncio.TimeoutError, TimeoutError):
+                    logger.warning("Reply fetch timeout for msg %d", mid)
+                    return idx, []
                 except FloodWaitError as e:
                     wait = getattr(e, "seconds", 0) or 0
                     logger.warning(
                         "Reply fetch FloodWaitError for msg %d: wait %ds",
-                        msg_id,
+                        mid,
                         wait,
                     )
-                    ctx["replies"] = []
+                    return idx, []
                 except Exception as e:
-                    logger.warning("Reply fetch failed for msg %d: %s", msg_id, e)
-                    ctx["replies"] = []
-            else:
-                ctx["replies"] = []
+                    logger.warning("Reply fetch failed for msg %d: %s", mid, e)
+                    return idx, []
 
-        if ctx:
-            msg["context"] = ctx
+            results_list = await asyncio.gather(
+                *[_fetch_one_reply(i, mid) for i, mid in reply_tasks],
+                return_exceptions=True,
+            )
+
+            reply_elapsed = time.monotonic() - reply_start
+            logger.info(
+                "Reply threads: %d fetches completed in %.1fs",
+                len(reply_tasks),
+                reply_elapsed,
+            )
+
+            for result in results_list:
+                if isinstance(result, BaseException):
+                    logger.warning("Reply gather exception: %s", result)
+                    continue
+                idx, replies_list = result
+                if idx < len(messages) and "context" in messages[idx]:
+                    messages[idx]["context"]["replies"] = replies_list
 
     if timed_out and not warning:
         warning = "Context enrichment: timed out; some results may lack context."
