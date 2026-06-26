@@ -1534,35 +1534,39 @@ class TestGetMessagesContextHelpers:
 
     def test_extract_topic_id_from_message_with_reply_to_top_id(self):
         """Should extract topic_id from reply_to.reply_to_top_id."""
-        from src.tools.search.search_mode import _extract_topic_id_from_message
+        from src.utils.message_format import _extract_topic_metadata
 
         msg = MagicMock()
         msg.reply_to = MagicMock(reply_to_top_id=42, forum_topic=True, reply_to_msg_id=10)
-        assert _extract_topic_id_from_message(msg) == 42
+        msg.reply_to_msg_id = None
+        assert _extract_topic_metadata(msg).get("topic_id") == 42
 
     def test_extract_topic_id_from_message_with_forum_topic(self):
         """Should extract topic_id from reply_to_msg_id when forum_topic=True."""
-        from src.tools.search.search_mode import _extract_topic_id_from_message
+        from src.utils.message_format import _extract_topic_metadata
 
         msg = MagicMock()
         msg.reply_to = MagicMock(reply_to_top_id=None, forum_topic=True, reply_to_msg_id=10)
-        assert _extract_topic_id_from_message(msg) == 10
+        msg.reply_to_msg_id = None
+        assert _extract_topic_metadata(msg).get("topic_id") == 10
 
     def test_extract_topic_id_from_message_no_topic(self):
         """Should return None for non-forum messages."""
-        from src.tools.search.search_mode import _extract_topic_id_from_message
+        from src.utils.message_format import _extract_topic_metadata
 
         msg = MagicMock()
         msg.reply_to = MagicMock(reply_to_top_id=None, forum_topic=False, reply_to_msg_id=None)
-        assert _extract_topic_id_from_message(msg) is None
+        msg.reply_to_msg_id = None
+        assert _extract_topic_metadata(msg).get("topic_id") is None
 
     def test_extract_topic_id_from_message_no_reply_to(self):
-        """Should return None when reply_to is None."""
-        from src.tools.search.search_mode import _extract_topic_id_from_message
+        """Should return empty dict when reply_to is None."""
+        from src.utils.message_format import _extract_topic_metadata
 
         msg = MagicMock()
         msg.reply_to = None
-        assert _extract_topic_id_from_message(msg) is None
+        msg.reply_to_msg_id = None
+        assert _extract_topic_metadata(msg) == {}
 
     def test_is_valid_context_neighbor_filters_service_messages(self):
         """Should reject service messages (no displayable content)."""

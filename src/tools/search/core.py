@@ -1,6 +1,9 @@
 """get_messages entry point and mode dispatch."""
 
+import logging
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from src.client.connection import get_connected_client
 from src.tools.messages import read_messages_by_ids
@@ -8,7 +11,7 @@ from src.utils.entity import get_entity_by_id
 from src.utils.error_handling import log_and_build_error
 from src.utils.message_format import response_attachment_warning
 
-from .replies import _fetch_direct_replies, _handle_reply_mode
+from .replies import _handle_reply_mode
 from .search_mode import _DEFAULT_MAX_CONCURRENT, _enrich_with_context, _handle_query_mode
 from .types import MessageRetrievalMode, ThreadScope, resolve_mode
 
@@ -136,16 +139,23 @@ async def _dispatch_search_mode(
 
     # Apply context enrichment if requested and results available
     if (context > 0 or include_reply_threads) and chat_id and "messages" in result:
-        client = await get_connected_client()
-        entity = await get_entity_by_id(chat_id)
-        if entity:
-            result["messages"] = await _enrich_with_context(
-                client=client,
-                entity=entity,
-                messages=result["messages"],
-                context=context,
-                include_reply_threads=include_reply_threads,
-            )
+        try:
+            client = await get_connected_client()
+            entity = await get_entity_by_id(chat_id)
+            if entity:
+                messages, ctx_warning = await _enrich_with_context(
+                    client=client,
+                    entity=entity,
+                    messages=result["messages"],
+                    context=context,
+                    include_reply_threads=include_reply_threads,
+                )
+                result["messages"] = messages
+                if ctx_warning:
+                    existing = result.get("_warning", "")
+                    result["_warning"] = f"{existing}\n{ctx_warning}".strip()
+        except Exception as e:
+            logger.warning("Context enrichment failed, returning results without context: %s", e)
 
     return result
 
