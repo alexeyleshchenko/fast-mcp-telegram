@@ -43,6 +43,7 @@ _CONTEXT_TIMEOUT_BUDGET = 30  # seconds for entire enrichment phase
 _CONTEXT_MAX_IDS = 500  # max neighbor + reply_to IDs per batch
 _CONTEXT_MAX_REPLY_FETCHES = 20  # max _fetch_direct_replies calls
 _CONTEXT_REPLY_LIMIT = 5  # max replies per result
+_CONTEXT_PER_REPLY_TIMEOUT = 10  # seconds per individual reply fetch
 
 
 def _is_valid_context_neighbor(
@@ -245,9 +246,7 @@ async def _enrich_with_context(
 
             async def _fetch_one_reply(idx: int, mid: int) -> tuple[int, list]:
                 try:
-                    async with asyncio.timeout(
-                        max(1, _CONTEXT_TIMEOUT_BUDGET - (reply_start - start_time))
-                    ):
+                    async with asyncio.timeout(_CONTEXT_PER_REPLY_TIMEOUT):
                         replies, _disc_meta = await _fetch_replies(
                             client,
                             entity,
