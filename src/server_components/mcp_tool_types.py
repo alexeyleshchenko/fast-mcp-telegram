@@ -215,6 +215,28 @@ FromUser = Annotated[
     ),
 ]
 
+ContextWindow = Annotated[
+    int,
+    Field(
+        description=(
+            "Number of surrounding messages to include as context for each search result. "
+            "0 = disabled (default). 1–10 = include N messages before and N after each result. "
+            "Also fetches the message being replied to and top replies (if include_reply_threads=true). "
+            "Requires chat_id. Disabled when result count exceeds cost-based caps."
+        )
+    ),
+]
+
+IncludeReplyThreads = Annotated[
+    bool,
+    Field(
+        description=(
+            "If true, fetch up to 5 direct replies per search result and attach as reply_thread. "
+            "Each result costs one API call (not batchable). Default: false."
+        )
+    ),
+]
+
 FilterParam = Annotated[
     str,
     Field(

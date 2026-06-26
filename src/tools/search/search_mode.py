@@ -2,9 +2,11 @@
 
 import asyncio
 import logging
+import time
 from datetime import datetime
 from typing import Any
 
+from telethon.errors import FloodWaitError
 from telethon.tl.functions.messages import SearchGlobalRequest
 from telethon.tl.types import InputMessagesFilterEmpty, InputPeerEmpty
 
@@ -19,17 +21,252 @@ from src.utils.entity import (
 from src.utils.error_handling import log_and_build_error, log_connection_error_response
 from src.utils.helpers import _append_dedup_until_limit
 from src.utils.message_format import (
+    message_has_displayable_content,
     response_attachment_warning,
     transcribe_voice_messages,
 )
 
 from . import results
+from .forum_replies import _get_messages_by_ids_batched
+from .replies import _fetch_direct_replies
 from .search_generators import _search_chat_messages_generator
 
 logger = logging.getLogger(__name__)
 
 # Default semaphore limits for global search parallelization
 _DEFAULT_MAX_CONCURRENT: int = 2
+
+# Context enrichment caps
+_CONTEXT_TIMEOUT_BUDGET = 30  # seconds for entire enrichment phase
+_CONTEXT_MAX_IDS = 500  # max neighbor + reply_to IDs per batch
+_CONTEXT_MAX_REPLY_FETCHES = 20  # max _fetch_direct_replies calls
+_CONTEXT_REPLY_LIMIT = 5  # max replies per result
+
+
+def _extract_topic_id_from_message(message) -> int | None:
+    """Extract topic_id from a raw Telethon message for forum scoping."""
+    reply_to = getattr(message, "reply_to", None)
+    reply_to_top_id = getattr(reply_to, "reply_to_top_id", None)
+    if reply_to_top_id:
+        return reply_to_top_id
+    forum_topic = bool(getattr(reply_to, "forum_topic", False))
+    reply_to_msg_id = getattr(reply_to, "reply_to_msg_id", None)
+    if forum_topic and reply_to_msg_id:
+        return reply_to_msg_id
+    return None
+
+
+def _is_valid_context_neighbor(
+    message, is_forum: bool, result_topic_id: int | None
+) -> bool:
+    """Check if a neighbor message is valid for context inclusion."""
+    if not message:
+        return False
+    if not message_has_displayable_content(message):
+        return False
+    if is_forum:
+        neighbor_topic = _extract_topic_id_from_message(message)
+        if result_topic_id is not None:
+            return neighbor_topic == result_topic_id
+        return neighbor_topic is None
+    return True
+
+
+def _lightweight_from_raw(message) -> dict[str, Any]:
+    """Build lightweight context dict from a raw Telethon message."""
+    full_text = (
+        getattr(message, "text", None)
+        or getattr(message, "message", None)
+        or getattr(message, "caption", None)
+    )
+    return {
+        "id": message.id,
+        "date": message.date.isoformat() if getattr(message, "date", None) else None,
+        "text": full_text,
+        "sender_id": getattr(message, "sender_id", None),
+    }
+
+
+def _lightweight_from_result(result: dict[str, Any]) -> dict[str, Any]:
+    """Build lightweight context dict from a result dict."""
+    sender = result.get("sender")
+    sender_id = sender.get("id") if isinstance(sender, dict) else None
+    return {
+        "id": result.get("id"),
+        "date": result.get("date"),
+        "text": result.get("text"),
+        "sender_id": sender_id,
+    }
+
+
+def _get_reply_count(message) -> int:
+    """Get reply count from a raw Telethon message's replies attribute."""
+    if not message:
+        return 0
+    replies = getattr(message, "replies", None)
+    if not replies:
+        return 0
+    return getattr(replies, "replies", 0) or 0
+
+
+async def _enrich_with_context(
+    client,
+    entity,
+    messages: list[dict[str, Any]],
+    context: int,
+    include_reply_threads: bool = False,
+) -> list[dict[str, Any]]:
+    """Enrich search results with surrounding context and optional reply threads.
+
+    Adds a 'context' envelope to each result with:
+    - before[]: N messages before each result (lightweight format)
+    - after[]: N messages after each result (lightweight format)
+    - reply_to: the message being replied to (lightweight format, or null)
+    - replies[]: direct replies (if include_reply_threads=True, max 5)
+
+    Caps: max 500 IDs, max 20 reply thread fetches, 30s timeout budget.
+    Partial failure: returns results without context on error.
+    """
+    if not messages:
+        return messages
+
+    start_time = time.monotonic()
+    is_forum = bool(getattr(entity, "forum", False))
+
+    # Step 1: Collect all unique IDs needed
+    all_ids: set[int] = set()
+    result_ids: set[int] = set()
+    reply_to_ids: set[int] = set()
+
+    for msg in messages:
+        msg_id = msg.get("id")
+        if not msg_id:
+            continue
+        result_ids.add(msg_id)
+        for offset in range(1, context + 1):
+            all_ids.add(msg_id - offset)
+            all_ids.add(msg_id + offset)
+        rt = msg.get("reply_to_msg_id")
+        if rt:
+            reply_to_ids.add(rt)
+
+    # Include result IDs for reply count checking and reply_to for resolution
+    all_ids.update(reply_to_ids)
+    all_ids.update(result_ids)
+    all_ids.discard(0)
+
+    # Cap total IDs — prioritize reply_to and result IDs over neighbors
+    if len(all_ids) > _CONTEXT_MAX_IDS:
+        neighbor_ids = all_ids - reply_to_ids - result_ids
+        all_ids = reply_to_ids | result_ids
+        remaining = _CONTEXT_MAX_IDS - len(all_ids)
+        if remaining > 0:
+            all_ids.update(list(neighbor_ids)[:remaining])
+        logger.warning(
+            "Context enrichment: capped IDs to %d (was %d)",
+            _CONTEXT_MAX_IDS,
+            len(all_ids) + len(neighbor_ids),
+        )
+
+    # Step 2: Batch-fetch all needed messages
+    try:
+        raw_messages = await _get_messages_by_ids_batched(
+            client, entity, list(all_ids)
+        )
+    except FloodWaitError as e:
+        wait = getattr(e, "seconds", 0) or 0
+        logger.warning("Context enrichment FloodWaitError: wait %ds", wait)
+        return messages
+    except Exception as e:
+        logger.warning("Context enrichment fetch failed: %s", e)
+        return messages
+
+    fetched: dict[int, Any] = {}
+    for m in raw_messages:
+        if m:
+            fetched[m.id] = m
+
+    # Step 3: Build context envelopes
+    reply_fetch_count = 0
+
+    for msg in messages:
+        msg_id = msg.get("id")
+        if not msg_id:
+            continue
+
+        # Check timeout
+        if time.monotonic() - start_time > _CONTEXT_TIMEOUT_BUDGET:
+            logger.warning(
+                "Context enrichment: timeout budget exceeded (%.1fs), stopping",
+                time.monotonic() - start_time,
+            )
+            break
+
+        msg_topic_id = msg.get("topic_id")
+        ctx: dict[str, Any] = {}
+
+        # Before messages (most recent first → oldest last)
+        before = []
+        for offset in range(1, context + 1):
+            neighbor = fetched.get(msg_id - offset)
+            if _is_valid_context_neighbor(neighbor, is_forum, msg_topic_id):
+                before.append(_lightweight_from_raw(neighbor))
+        if before:
+            ctx["before"] = before
+
+        # After messages (oldest first → most recent last)
+        after = []
+        for offset in range(1, context + 1):
+            neighbor = fetched.get(msg_id + offset)
+            if _is_valid_context_neighbor(neighbor, is_forum, msg_topic_id):
+                after.append(_lightweight_from_raw(neighbor))
+        if after:
+            ctx["after"] = after
+
+        # Reply-to message
+        rt = msg.get("reply_to_msg_id")
+        if rt and rt in fetched:
+            ctx["reply_to"] = _lightweight_from_raw(fetched[rt])
+        else:
+            ctx["reply_to"] = None
+
+        # Reply threads
+        if include_reply_threads:
+            raw_result = fetched.get(msg_id)
+            reply_count = _get_reply_count(raw_result)
+            if reply_count > 0 and reply_fetch_count < _CONTEXT_MAX_REPLY_FETCHES:
+                reply_fetch_count += 1
+                try:
+                    replies = await _fetch_direct_replies(
+                        client,
+                        entity,
+                        msg_id,
+                        _CONTEXT_REPLY_LIMIT,
+                        None,
+                        False,
+                    )
+                    ctx["replies"] = [
+                        _lightweight_from_result(r)
+                        for r in replies[:_CONTEXT_REPLY_LIMIT]
+                    ]
+                except FloodWaitError as e:
+                    wait = getattr(e, "seconds", 0) or 0
+                    logger.warning(
+                        "Reply fetch FloodWaitError for msg %d: wait %ds",
+                        msg_id,
+                        wait,
+                    )
+                    ctx["replies"] = []
+                except Exception as e:
+                    logger.warning("Reply fetch failed for msg %d: %s", msg_id, e)
+                    ctx["replies"] = []
+            else:
+                ctx["replies"] = []
+
+        if ctx:
+            msg["context"] = ctx
+
+    return messages
 
 
 async def _execute_parallel_searches_generators(

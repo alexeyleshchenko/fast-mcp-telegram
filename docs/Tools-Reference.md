@@ -224,6 +224,8 @@ get_messages(
   min_date?: string,             // ISO date filter (search, browse, and reply/forum-topic modes)
   max_date?: string,             // ISO date filter (search, browse, and reply/forum-topic modes)
   from_user?: string,            // Sender filter: @username, phone, user id, t.me URL, 'me' (per-chat only)
+  context?: number = 0,          // Neighbor messages per side (1–10); 0=disabled. Requires chat_id.
+  include_reply_threads?: boolean = false,  // Fetch up to 5 direct replies per result (opt-in)
   auto_expand_batches?: number = 2,  // Extra batches for filtered searches
   include_total_count?: boolean = false  // Include total count (chat search only)
 )
@@ -271,6 +273,22 @@ get_messages(
 }
 ```
 
+When `context > 0` or `include_reply_threads=true`, each message gains a `context` envelope:
+```json
+{
+  "id": 500,
+  "text": "the matched message",
+  "context": {
+    "before": [{"id": 498, "date": "...", "text": "...", "sender_id": 42}],
+    "after": [{"id": 502, "date": "...", "text": "...", "sender_id": 43}],
+    "reply_to": {"id": 400, "date": "...", "text": "...", "sender_id": 44},
+    "replies": [{"id": 501, "date": "...", "text": "...", "sender_id": 45}]
+  }
+}
+```
+
+Context messages use a lightweight format (id, date, text, sender_id) to save tokens. `replies` is only populated when `include_reply_threads=true`. `reply_to` is `null` when the message has no reply target. The `context` key is absent entirely when no enrichment is requested.
+
 **Features:**
 - **Rich Media Parsing**: Automatically parses Todo lists, polls, photos, documents
 - **Voice Transcription**: Automatic for Premium accounts with parallel processing
@@ -278,6 +296,7 @@ get_messages(
 - **Auto-Detection**: Automatically detects channel posts and uses discussion group
 - **Structured Data**: LLM-friendly JSON structures
 - **Context Optimization**: When `chat_id` is provided (per-chat modes), the `chat` field is omitted from each message to save context. Global search includes `chat` since messages span different chats.
+- **Context Enrichment**: `context` parameter adds surrounding messages (before/after) and reply chains. `include_reply_threads` fetches direct replies. Lightweight format saves tokens. Forum topic-aware.
 
 **💡 Tips:**
 - **No query**: Returns latest messages from chat
@@ -353,6 +372,31 @@ get_messages(
 {"tool": "get_messages", "params": {
   "chat_id": "telegram",
   "query": "update, news"
+}}
+
+// 8. Search with context (3 messages before/after each result)
+{"tool": "get_messages", "params": {
+  "chat_id": "-1001234567890",
+  "query": "deadline",
+  "context": 3,
+  "limit": 10
+}}
+
+// 9. Search with context + reply threads
+{"tool": "get_messages", "params": {
+  "chat_id": "-1001234567890",
+  "query": "announcement",
+  "context": 2,
+  "include_reply_threads": true,
+  "limit": 10
+}}
+
+// 10. Reply threads only (no neighbor context)
+{"tool": "get_messages", "params": {
+  "chat_id": "-1001234567890",
+  "query": "question",
+  "include_reply_threads": true,
+  "limit": 5
 }}
 ```
 

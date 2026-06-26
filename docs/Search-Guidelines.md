@@ -193,6 +193,61 @@ Telegram search has specific limitations that AI models should understand to pro
 }}
 ```
 
+### Context Enrichment
+
+When you need surrounding conversation context for search results, use `context` and `include_reply_threads`:
+
+```json
+// Search with 3 messages before/after each result
+{"tool": "get_messages", "params": {
+  "chat_id": "-1001234567890",
+  "query": "deadline",
+  "context": 3,
+  "limit": 10
+}}
+
+// Search with context + reply threads (up to 5 replies per result)
+{"tool": "get_messages", "params": {
+  "chat_id": "-1001234567890",
+  "query": "announcement",
+  "context": 2,
+  "include_reply_threads": true,
+  "limit": 10
+}}
+
+// Reply threads only (no neighbor context)
+{"tool": "get_messages", "params": {
+  "chat_id": "-1001234567890",
+  "query": "question",
+  "context": 0,
+  "include_reply_threads": true,
+  "limit": 5
+}}
+```
+
+**Context envelope format** (added to each result when `context > 0`):
+```json
+{
+  "id": 500,
+  "text": "the matched message",
+  "context": {
+    "before": [{"id": 498, "text": "...", "sender_id": 42, "date": "..."}],
+    "after": [{"id": 502, "text": "...", "sender_id": 43, "date": "..."}],
+    "reply_to": {"id": 400, "text": "...", "sender_id": 44, "date": "..."},
+    "replies": [{"id": 501, "text": "...", "sender_id": 45, "date": "..."}]
+  }
+}
+```
+
+**Notes:**
+- `context` is clamped to 1–10. Default 0 = disabled.
+- `include_reply_threads` is opt-in (default false) — each result with replies costs one extra API call.
+- Context uses a lightweight format (id, date, text, sender_id) to save tokens.
+- Enrichment is disabled when result count exceeds cost caps (500 IDs, 20 reply fetches).
+- Requires `chat_id` — not available for global search.
+- Forum topics: neighbors are filtered to the same topic.
+- On enrichment failure, results are returned without context (never loses search results).
+
 ## Performance Tips
 
 ### Limit Management

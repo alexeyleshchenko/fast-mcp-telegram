@@ -2,12 +2,14 @@
 
 from typing import Any
 
+from src.client.connection import get_connected_client
 from src.tools.messages import read_messages_by_ids
+from src.utils.entity import get_entity_by_id
 from src.utils.error_handling import log_and_build_error
 from src.utils.message_format import response_attachment_warning
 
-from .replies import _handle_reply_mode
-from .search_mode import _DEFAULT_MAX_CONCURRENT, _handle_query_mode
+from .replies import _fetch_direct_replies, _handle_reply_mode
+from .search_mode import _DEFAULT_MAX_CONCURRENT, _enrich_with_context, _handle_query_mode
 from .types import MessageRetrievalMode, ThreadScope, resolve_mode
 
 
@@ -27,6 +29,8 @@ def _build_search_params(
     include_total_count: bool,
     max_concurrent: int | None = None,
     from_user: str | None = None,
+    context: int = 0,
+    include_reply_threads: bool = False,
 ) -> dict[str, Any]:
     return {
         "query": query,
@@ -43,6 +47,8 @@ def _build_search_params(
         "include_total_count": include_total_count,
         "max_concurrent": max_concurrent,
         "from_user": from_user,
+        "context": context,
+        "include_reply_threads": include_reply_threads,
         "is_global_search": chat_id is None,
         "has_query": bool(query and query.strip()),
         "has_date_filter": bool(min_date or max_date),
@@ -80,6 +86,8 @@ async def _dispatch_search_mode(
     include_total_count: bool,
     thread_scope: ThreadScope,
     from_user: str | None = None,
+    context: int = 0,
+    include_reply_threads: bool = False,
 ) -> dict[str, Any]:
     if mode is MessageRetrievalMode.MESSAGE_IDS:
         if chat_id is None or message_ids is None:
@@ -112,7 +120,7 @@ async def _dispatch_search_mode(
             max_date=max_date,
         )
 
-    return await _handle_query_mode(
+    result = await _handle_query_mode(
         query=query,
         chat_id=chat_id,
         limit=limit,
@@ -125,6 +133,21 @@ async def _dispatch_search_mode(
         params=params,
         from_user=from_user,
     )
+
+    # Apply context enrichment if requested and results available
+    if (context > 0 or include_reply_threads) and chat_id and "messages" in result:
+        client = await get_connected_client()
+        entity = await get_entity_by_id(chat_id)
+        if entity:
+            result["messages"] = await _enrich_with_context(
+                client=client,
+                entity=entity,
+                messages=result["messages"],
+                context=context,
+                include_reply_threads=include_reply_threads,
+            )
+
+    return result
 
 
 async def _handle_ids_mode(
@@ -164,6 +187,8 @@ async def search_messages_impl(
     thread_scope: ThreadScope = "auto",
     max_concurrent: int | None = _DEFAULT_MAX_CONCURRENT,
     from_user: str | None = None,
+    context: int = 0,
+    include_reply_threads: bool = False,
 ) -> dict[str, Any]:
     """
     Unified message retrieval: search, browse, read by IDs, or list replies.
@@ -192,6 +217,8 @@ async def search_messages_impl(
         include_total_count=include_total_count,
         max_concurrent=max_concurrent,
         from_user=from_user,
+        context=context,
+        include_reply_threads=include_reply_threads,
     )
 
     if thread_scope in ("full", "direct") and reply_to_id is None:
@@ -266,4 +293,6 @@ async def search_messages_impl(
         include_total_count=include_total_count,
         thread_scope=thread_scope,
         from_user=from_user,
+        context=context,
+        include_reply_threads=include_reply_threads,
     )

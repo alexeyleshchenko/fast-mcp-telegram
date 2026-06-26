@@ -1026,3 +1026,655 @@ class TestGetMessagesDateFiltering:
         assert len(result["messages"]) == 1
         assert result["messages"][0]["id"] == 99
         assert "[Service: PinMessage]" in (result["messages"][0].get("text") or "")
+
+
+class TestGetMessagesContext:
+    """Test context enrichment feature for search results."""
+
+    @pytest.mark.asyncio
+    @patch("src.tools.search.search_mode._get_messages_by_ids_batched", new_callable=AsyncMock)
+    @patch("src.tools.search.search_mode.get_entity_by_id", new_callable=AsyncMock)
+    @patch("src.tools.search.core.get_entity_by_id", new_callable=AsyncMock)
+    @patch("src.tools.search.core.get_connected_client", new_callable=AsyncMock)
+    @patch("src.tools.search.search_mode.get_connected_client", new_callable=AsyncMock)
+    @patch("src.tools.search.search_generators.get_entity_by_id", new_callable=AsyncMock)
+    @patch("src.tools.search.search_mode.get_entity_by_id", new_callable=AsyncMock)
+    async def test_context_disabled_by_default(
+        self,
+        mock_sm_entity,
+        mock_gen_entity,
+        mock_sm_client,
+        mock_core_client,
+        mock_core_entity,
+        mock_enrich_entity,
+        mock_batched,
+    ):
+        """context=0 should not add context envelope."""
+        mock_entity = Mock()
+        mock_entity.id = 123
+        mock_entity.broadcast = False
+        mock_entity.forum = False
+        mock_sm_entity.return_value = mock_entity
+        mock_gen_entity.return_value = mock_entity
+        mock_core_entity.return_value = mock_entity
+        mock_enrich_entity.return_value = mock_entity
+
+        mock_client = MagicMock()
+        mock_client.get_me = AsyncMock(return_value=Mock(premium=False))
+        mock_sm_client.return_value = mock_client
+        mock_core_client.return_value = mock_client
+
+        msg = make_mock_message(
+            id=500, text="result message", date=datetime(2024, 6, 15, tzinfo=UTC)
+        )
+
+        async def mock_iter():
+            yield msg
+
+        mock_client.iter_messages = MagicMock(return_value=mock_iter())
+
+        result = await search_messages_impl(
+            chat_id="me",
+            query="result",
+            limit=10,
+            context=0,
+        )
+
+        assert "messages" in result
+        if result["messages"]:
+            assert "context" not in result["messages"][0]
+
+    @pytest.mark.asyncio
+    @patch("src.tools.search.search_mode._get_messages_by_ids_batched", new_callable=AsyncMock)
+    @patch("src.tools.search.search_mode.get_entity_by_id", new_callable=AsyncMock)
+    @patch("src.tools.search.core.get_entity_by_id", new_callable=AsyncMock)
+    @patch("src.tools.search.core.get_connected_client", new_callable=AsyncMock)
+    @patch("src.tools.search.search_mode.get_connected_client", new_callable=AsyncMock)
+    @patch("src.tools.search.search_generators.get_entity_by_id", new_callable=AsyncMock)
+    async def test_context_adds_before_after(
+        self,
+        mock_gen_entity,
+        mock_sm_client,
+        mock_core_client,
+        mock_core_entity,
+        mock_sm_entity,
+        mock_batched,
+    ):
+        """context=2 should add before[] and after[] with neighbor messages."""
+        mock_entity = Mock()
+        mock_entity.id = 123
+        mock_entity.broadcast = False
+        mock_entity.forum = False
+        mock_gen_entity.return_value = mock_entity
+        mock_sm_entity.return_value = mock_entity
+        mock_core_entity.return_value = mock_entity
+
+        mock_client = MagicMock()
+        mock_client.get_me = AsyncMock(return_value=Mock(premium=False))
+        mock_sm_client.return_value = mock_client
+        mock_core_client.return_value = mock_client
+
+        # Search result: message 500
+        result_msg = make_mock_message(
+            id=500, text="found message", date=datetime(2024, 6, 15, tzinfo=UTC)
+        )
+
+        async def mock_iter():
+            yield result_msg
+
+        mock_client.iter_messages = MagicMock(return_value=mock_iter())
+
+        # Neighbors for context (498, 499, 501, 502)
+        def make_raw_msg(mid, text):
+            m = MagicMock()
+            m.id = mid
+            m.text = text
+            m.message = text
+            m.caption = None
+            m.date = datetime(2024, 6, 15, tzinfo=UTC)
+            m.sender_id = 42
+            m.media = None
+            m.reply_to = None
+            m.reply_to_msg_id = None
+            return m
+
+        neighbors = [
+            make_raw_msg(498, "before 2"),
+            make_raw_msg(499, "before 1"),
+            make_raw_msg(500, "found message"),
+            make_raw_msg(501, "after 1"),
+            make_raw_msg(502, "after 2"),
+        ]
+        mock_batched.return_value = neighbors
+
+        result = await search_messages_impl(
+            chat_id="me",
+            query="found",
+            limit=10,
+            context=2,
+        )
+
+        assert "messages" in result
+        assert len(result["messages"]) == 1
+        ctx = result["messages"][0].get("context")
+        assert ctx is not None
+        assert "before" in ctx
+        assert "after" in ctx
+        assert len(ctx["before"]) == 2
+        assert len(ctx["after"]) == 2
+        # Before is ordered most-recent-first (499, 498)
+        assert ctx["before"][0]["id"] == 499
+        assert ctx["before"][1]["id"] == 498
+        # After is ordered oldest-first (501, 502)
+        assert ctx["after"][0]["id"] == 501
+        assert ctx["after"][1]["id"] == 502
+
+    @pytest.mark.asyncio
+    @patch("src.tools.search.search_mode._get_messages_by_ids_batched", new_callable=AsyncMock)
+    @patch("src.tools.search.search_mode.get_entity_by_id", new_callable=AsyncMock)
+    @patch("src.tools.search.core.get_entity_by_id", new_callable=AsyncMock)
+    @patch("src.tools.search.core.get_connected_client", new_callable=AsyncMock)
+    @patch("src.tools.search.search_mode.get_connected_client", new_callable=AsyncMock)
+    @patch("src.tools.search.search_generators.get_entity_by_id", new_callable=AsyncMock)
+    async def test_context_reply_to(
+        self,
+        mock_gen_entity,
+        mock_sm_client,
+        mock_core_client,
+        mock_core_entity,
+        mock_sm_entity,
+        mock_batched,
+    ):
+        """context should resolve reply_to_msg_id to lightweight message."""
+        mock_entity = Mock()
+        mock_entity.id = 123
+        mock_entity.broadcast = False
+        mock_entity.forum = False
+        mock_gen_entity.return_value = mock_entity
+        mock_sm_entity.return_value = mock_entity
+        mock_core_entity.return_value = mock_entity
+
+        mock_client = MagicMock()
+        mock_client.get_me = AsyncMock(return_value=Mock(premium=False))
+        mock_sm_client.return_value = mock_client
+        mock_core_client.return_value = mock_client
+
+        # Result message replies to msg 400
+        result_msg = make_mock_message(
+            id=500,
+            text="reply message",
+            date=datetime(2024, 6, 15, tzinfo=UTC),
+            reply_to_msg_id=400,
+        )
+
+        async def mock_iter():
+            yield result_msg
+
+        mock_client.iter_messages = MagicMock(return_value=mock_iter())
+
+        def make_raw_msg(mid, text):
+            m = MagicMock()
+            m.id = mid
+            m.text = text
+            m.message = text
+            m.caption = None
+            m.date = datetime(2024, 6, 15, tzinfo=UTC)
+            m.sender_id = 42
+            m.media = None
+            m.reply_to = None
+            m.reply_to_msg_id = None
+            return m
+
+        fetched = [
+            make_raw_msg(400, "original message"),
+            make_raw_msg(499, "neighbor before"),
+            make_raw_msg(500, "reply message"),
+            make_raw_msg(501, "neighbor after"),
+        ]
+        mock_batched.return_value = fetched
+
+        result = await search_messages_impl(
+            chat_id="me",
+            query="reply",
+            limit=10,
+            context=1,
+        )
+
+        assert "messages" in result
+        ctx = result["messages"][0].get("context")
+        assert ctx is not None
+        assert ctx["reply_to"] is not None
+        assert ctx["reply_to"]["id"] == 400
+        assert ctx["reply_to"]["text"] == "original message"
+
+    @pytest.mark.asyncio
+    @patch("src.tools.search.search_mode._fetch_direct_replies", new_callable=AsyncMock)
+    @patch("src.tools.search.search_mode._get_messages_by_ids_batched", new_callable=AsyncMock)
+    @patch("src.tools.search.search_mode.get_entity_by_id", new_callable=AsyncMock)
+    @patch("src.tools.search.core.get_entity_by_id", new_callable=AsyncMock)
+    @patch("src.tools.search.core.get_connected_client", new_callable=AsyncMock)
+    @patch("src.tools.search.search_mode.get_connected_client", new_callable=AsyncMock)
+    @patch("src.tools.search.search_generators.get_entity_by_id", new_callable=AsyncMock)
+    async def test_context_reply_threads(
+        self,
+        mock_gen_entity,
+        mock_sm_client,
+        mock_core_client,
+        mock_core_entity,
+        mock_sm_entity,
+        mock_batched,
+        mock_fetch_replies,
+    ):
+        """include_reply_threads=True should fetch replies and attach them."""
+        mock_entity = Mock()
+        mock_entity.id = 123
+        mock_entity.broadcast = False
+        mock_entity.forum = False
+        mock_gen_entity.return_value = mock_entity
+        mock_sm_entity.return_value = mock_entity
+        mock_core_entity.return_value = mock_entity
+
+        mock_client = MagicMock()
+        mock_client.get_me = AsyncMock(return_value=Mock(premium=False))
+        mock_sm_client.return_value = mock_client
+        mock_core_client.return_value = mock_client
+
+        result_msg = make_mock_message(
+            id=500, text="popular message", date=datetime(2024, 6, 15, tzinfo=UTC)
+        )
+
+        async def mock_iter():
+            yield result_msg
+
+        mock_client.iter_messages = MagicMock(return_value=mock_iter())
+
+        def make_raw_msg(mid, text, reply_count=0):
+            m = MagicMock()
+            m.id = mid
+            m.text = text
+            m.message = text
+            m.caption = None
+            m.date = datetime(2024, 6, 15, tzinfo=UTC)
+            m.sender_id = 42
+            m.media = None
+            m.reply_to = None
+            m.reply_to_msg_id = None
+            if reply_count > 0:
+                m.replies = MagicMock()
+                m.replies.replies = reply_count
+            else:
+                m.replies = None
+            return m
+
+        fetched = [
+            make_raw_msg(500, "popular message", reply_count=3),
+        ]
+        mock_batched.return_value = fetched
+
+        # Mock _fetch_direct_replies returns result dicts
+        mock_fetch_replies.return_value = [
+            {"id": 501, "text": "reply 1", "date": "2024-06-15T00:00:00", "sender": {"id": 10}},
+            {"id": 502, "text": "reply 2", "date": "2024-06-15T00:01:00", "sender": {"id": 11}},
+        ]
+
+        result = await search_messages_impl(
+            chat_id="me",
+            query="popular",
+            limit=10,
+            context=0,
+            include_reply_threads=True,
+        )
+
+        assert "messages" in result
+        ctx = result["messages"][0].get("context")
+        assert ctx is not None
+        assert "replies" in ctx
+        assert len(ctx["replies"]) == 2
+        assert ctx["replies"][0]["id"] == 501
+        assert ctx["replies"][1]["id"] == 502
+
+    @pytest.mark.asyncio
+    @patch("src.tools.search.search_mode._get_messages_by_ids_batched", new_callable=AsyncMock)
+    @patch("src.tools.search.search_mode.get_entity_by_id", new_callable=AsyncMock)
+    @patch("src.tools.search.core.get_entity_by_id", new_callable=AsyncMock)
+    @patch("src.tools.search.core.get_connected_client", new_callable=AsyncMock)
+    @patch("src.tools.search.search_mode.get_connected_client", new_callable=AsyncMock)
+    @patch("src.tools.search.search_generators.get_entity_by_id", new_callable=AsyncMock)
+    async def test_context_partial_failure_returns_messages(
+        self,
+        mock_gen_entity,
+        mock_sm_client,
+        mock_core_client,
+        mock_core_entity,
+        mock_sm_entity,
+        mock_batched,
+    ):
+        """Enrichment failure should return messages without context (not lose results)."""
+        mock_entity = Mock()
+        mock_entity.id = 123
+        mock_entity.broadcast = False
+        mock_entity.forum = False
+        mock_gen_entity.return_value = mock_entity
+        mock_sm_entity.return_value = mock_entity
+        mock_core_entity.return_value = mock_entity
+
+        mock_client = MagicMock()
+        mock_client.get_me = AsyncMock(return_value=Mock(premium=False))
+        mock_sm_client.return_value = mock_client
+        mock_core_client.return_value = mock_client
+
+        result_msg = make_mock_message(
+            id=500, text="result", date=datetime(2024, 6, 15, tzinfo=UTC)
+        )
+
+        async def mock_iter():
+            yield result_msg
+
+        mock_client.iter_messages = MagicMock(return_value=mock_iter())
+
+        # Make batched fetch fail
+        mock_batched.side_effect = RuntimeError("API error")
+
+        result = await search_messages_impl(
+            chat_id="me",
+            query="result",
+            limit=10,
+            context=2,
+        )
+
+        # Should still return the messages, just without context
+        assert "messages" in result
+        assert len(result["messages"]) == 1
+        assert "context" not in result["messages"][0]
+
+    @pytest.mark.asyncio
+    @patch("src.tools.search.search_mode._get_messages_by_ids_batched", new_callable=AsyncMock)
+    @patch("src.tools.search.search_mode.get_entity_by_id", new_callable=AsyncMock)
+    @patch("src.tools.search.core.get_entity_by_id", new_callable=AsyncMock)
+    @patch("src.tools.search.core.get_connected_client", new_callable=AsyncMock)
+    @patch("src.tools.search.search_mode.get_connected_client", new_callable=AsyncMock)
+    @patch("src.tools.search.search_generators.get_entity_by_id", new_callable=AsyncMock)
+    async def test_context_flood_wait_returns_messages(
+        self,
+        mock_gen_entity,
+        mock_sm_client,
+        mock_core_client,
+        mock_core_entity,
+        mock_sm_entity,
+        mock_batched,
+    ):
+        """FloodWaitError during enrichment should return messages without context."""
+        from telethon.errors import FloodWaitError
+
+        mock_entity = Mock()
+        mock_entity.id = 123
+        mock_entity.broadcast = False
+        mock_entity.forum = False
+        mock_gen_entity.return_value = mock_entity
+        mock_sm_entity.return_value = mock_entity
+        mock_core_entity.return_value = mock_entity
+
+        mock_client = MagicMock()
+        mock_client.get_me = AsyncMock(return_value=Mock(premium=False))
+        mock_sm_client.return_value = mock_client
+        mock_core_client.return_value = mock_client
+
+        result_msg = make_mock_message(
+            id=500, text="result", date=datetime(2024, 6, 15, tzinfo=UTC)
+        )
+
+        async def mock_iter():
+            yield result_msg
+
+        mock_client.iter_messages = MagicMock(return_value=mock_iter())
+
+        # Make batched fetch raise FloodWaitError
+        flood = FloodWaitError(request=None, capture=30)
+        mock_batched.side_effect = flood
+
+        result = await search_messages_impl(
+            chat_id="me",
+            query="result",
+            limit=10,
+            context=2,
+        )
+
+        assert "messages" in result
+        assert len(result["messages"]) == 1
+        assert "context" not in result["messages"][0]
+
+    @pytest.mark.asyncio
+    @patch("src.tools.search.search_mode._get_messages_by_ids_batched", new_callable=AsyncMock)
+    @patch("src.tools.search.search_mode.get_entity_by_id", new_callable=AsyncMock)
+    @patch("src.tools.search.core.get_entity_by_id", new_callable=AsyncMock)
+    @patch("src.tools.search.core.get_connected_client", new_callable=AsyncMock)
+    @patch("src.tools.search.search_mode.get_connected_client", new_callable=AsyncMock)
+    @patch("src.tools.search.search_generators.get_entity_by_id", new_callable=AsyncMock)
+    async def test_context_id_cap(
+        self,
+        mock_gen_entity,
+        mock_sm_client,
+        mock_core_client,
+        mock_core_entity,
+        mock_sm_entity,
+        mock_batched,
+    ):
+        """Should cap total IDs at 500 when too many results with large context."""
+        mock_entity = Mock()
+        mock_entity.id = 123
+        mock_entity.broadcast = False
+        mock_entity.forum = False
+        mock_gen_entity.return_value = mock_entity
+        mock_sm_entity.return_value = mock_entity
+        mock_core_entity.return_value = mock_entity
+
+        mock_client = MagicMock()
+        mock_client.get_me = AsyncMock(return_value=Mock(premium=False))
+        mock_sm_client.return_value = mock_client
+        mock_core_client.return_value = mock_client
+
+        # Create 50 results to trigger ID cap with context=10
+        result_msgs = []
+        for i in range(50):
+            result_msgs.append(
+                make_mock_message(
+                    id=100 + i * 100,
+                    text=f"result {i}",
+                    date=datetime(2024, 6, 15, tzinfo=UTC),
+                )
+            )
+
+        async def mock_iter():
+            for msg in result_msgs:
+                yield msg
+
+        mock_client.iter_messages = MagicMock(return_value=mock_iter())
+
+        def make_raw_msg(mid, text):
+            m = MagicMock()
+            m.id = mid
+            m.text = text
+            m.message = text
+            m.caption = None
+            m.date = datetime(2024, 6, 15, tzinfo=UTC)
+            m.sender_id = 42
+            m.media = None
+            m.reply_to = None
+            m.reply_to_msg_id = None
+            return m
+
+        # Return enough neighbors to fill the cap
+        all_neighbors = []
+        for i in range(50):
+            base = 100 + i * 100
+            for offset in range(-10, 11):
+                if offset != 0:
+                    all_neighbors.append(make_raw_msg(base + offset, f"neighbor {base+offset}"))
+            all_neighbors.append(make_raw_msg(base, f"result {i}"))
+
+        mock_batched.return_value = all_neighbors
+
+        result = await search_messages_impl(
+            chat_id="me",
+            query="result",
+            limit=50,
+            context=10,
+        )
+
+        assert "messages" in result
+        # Verify enrichment was attempted (batched was called)
+        mock_batched.assert_called_once()
+        # The IDs passed should be capped
+        called_ids = mock_batched.call_args[0][2]
+        assert len(called_ids) <= 500
+
+
+class TestGetMessagesContextHelpers:
+    """Unit tests for context enrichment helper functions."""
+
+    def test_extract_topic_id_from_message_with_reply_to_top_id(self):
+        """Should extract topic_id from reply_to.reply_to_top_id."""
+        from src.tools.search.search_mode import _extract_topic_id_from_message
+
+        msg = MagicMock()
+        msg.reply_to = MagicMock(reply_to_top_id=42, forum_topic=True, reply_to_msg_id=10)
+        assert _extract_topic_id_from_message(msg) == 42
+
+    def test_extract_topic_id_from_message_with_forum_topic(self):
+        """Should extract topic_id from reply_to_msg_id when forum_topic=True."""
+        from src.tools.search.search_mode import _extract_topic_id_from_message
+
+        msg = MagicMock()
+        msg.reply_to = MagicMock(reply_to_top_id=None, forum_topic=True, reply_to_msg_id=10)
+        assert _extract_topic_id_from_message(msg) == 10
+
+    def test_extract_topic_id_from_message_no_topic(self):
+        """Should return None for non-forum messages."""
+        from src.tools.search.search_mode import _extract_topic_id_from_message
+
+        msg = MagicMock()
+        msg.reply_to = MagicMock(reply_to_top_id=None, forum_topic=False, reply_to_msg_id=None)
+        assert _extract_topic_id_from_message(msg) is None
+
+    def test_extract_topic_id_from_message_no_reply_to(self):
+        """Should return None when reply_to is None."""
+        from src.tools.search.search_mode import _extract_topic_id_from_message
+
+        msg = MagicMock()
+        msg.reply_to = None
+        assert _extract_topic_id_from_message(msg) is None
+
+    def test_is_valid_context_neighbor_filters_service_messages(self):
+        """Should reject service messages (no displayable content)."""
+        from src.tools.search.search_mode import _is_valid_context_neighbor
+
+        msg = MagicMock()
+        msg.text = None
+        msg.message = None
+        msg.caption = None
+        msg.media = None
+        msg.action = None
+        assert _is_valid_context_neighbor(msg, False, None) is False
+
+    def test_is_valid_context_neighbor_accepts_text_messages(self):
+        """Should accept messages with text content."""
+        from src.tools.search.search_mode import _is_valid_context_neighbor
+
+        msg = MagicMock()
+        msg.text = "hello"
+        msg.reply_to = None
+        assert _is_valid_context_neighbor(msg, False, None) is True
+
+    def test_is_valid_context_neighbor_forum_topic_mismatch(self):
+        """Should reject neighbors from different forum topics."""
+        from src.tools.search.search_mode import _is_valid_context_neighbor
+
+        msg = MagicMock()
+        msg.text = "other topic msg"
+        msg.reply_to = MagicMock(reply_to_top_id=99, forum_topic=True, reply_to_msg_id=None)
+        assert _is_valid_context_neighbor(msg, True, 42) is False
+
+    def test_is_valid_context_neighbor_forum_topic_match(self):
+        """Should accept neighbors from the same forum topic."""
+        from src.tools.search.search_mode import _is_valid_context_neighbor
+
+        msg = MagicMock()
+        msg.text = "same topic msg"
+        msg.reply_to = MagicMock(reply_to_top_id=42, forum_topic=True, reply_to_msg_id=None)
+        assert _is_valid_context_neighbor(msg, True, 42) is True
+
+    def test_lightweight_from_raw(self):
+        """Should extract id, date, text, sender_id from raw message."""
+        from src.tools.search.search_mode import _lightweight_from_raw
+
+        msg = MagicMock()
+        msg.id = 100
+        msg.text = "hello world"
+        msg.message = "hello world"
+        msg.caption = None
+        msg.date = datetime(2024, 6, 15, tzinfo=UTC)
+        msg.sender_id = 42
+
+        result = _lightweight_from_raw(msg)
+        assert result == {
+            "id": 100,
+            "date": "2024-06-15T00:00:00+00:00",
+            "text": "hello world",
+            "sender_id": 42,
+        }
+
+    def test_lightweight_from_result(self):
+        """Should extract id, date, text, sender_id from result dict."""
+        from src.tools.search.search_mode import _lightweight_from_result
+
+        result_dict = {
+            "id": 100,
+            "date": "2024-06-15T00:00:00",
+            "text": "hello world",
+            "sender": {"id": 42, "username": "alice"},
+        }
+
+        result = _lightweight_from_result(result_dict)
+        assert result == {
+            "id": 100,
+            "date": "2024-06-15T00:00:00",
+            "text": "hello world",
+            "sender_id": 42,
+        }
+
+    def test_lightweight_from_result_no_sender(self):
+        """Should handle None sender gracefully."""
+        from src.tools.search.search_mode import _lightweight_from_result
+
+        result_dict = {
+            "id": 100,
+            "date": "2024-06-15T00:00:00",
+            "text": "hello",
+            "sender": None,
+        }
+
+        result = _lightweight_from_result(result_dict)
+        assert result["sender_id"] is None
+
+    def test_get_reply_count_with_replies(self):
+        """Should return reply count from raw message."""
+        from src.tools.search.search_mode import _get_reply_count
+
+        msg = MagicMock()
+        msg.replies = MagicMock()
+        msg.replies.replies = 5
+        assert _get_reply_count(msg) == 5
+
+    def test_get_reply_count_no_replies(self):
+        """Should return 0 when message has no replies."""
+        from src.tools.search.search_mode import _get_reply_count
+
+        msg = MagicMock()
+        msg.replies = None
+        assert _get_reply_count(msg) == 0
+
+    def test_get_reply_count_none_message(self):
+        """Should return 0 for None message."""
+        from src.tools.search.search_mode import _get_reply_count
+
+        assert _get_reply_count(None) == 0

@@ -19,9 +19,11 @@ from src.server_components.mcp_tool_types import (
     ChatTypeComma,
     ContactFirstName,
     ContactLastName,
+    ContextWindow,
     FilesListParam,
     FilterParam,
     FromUser,
+    IncludeReplyThreads,
     IncludeTotalCount,
     LimitChats,
     LimitMessages,
@@ -87,6 +89,8 @@ _DESC_GET_MESSAGES = _tool_description(
     "Read or search messages in one chat: browse latest, search text, fetch by ids, "
     "or load replies to a message (comments, forum topics, threads). "
     "Use from_user to filter by sender (server-side, per-chat only). "
+    "Use context to include neighboring messages and reply chains around each result. "
+    "Use include_reply_threads to fetch up to 5 direct replies per result. "
     "Do not combine message_ids with query or reply_to_id. "
     "Success: messages, has_more, optional total_count and discussion fields. "
 )
@@ -285,6 +289,8 @@ def register_tools(mcp: FastMCP) -> None:
         min_date: MinDate = None,
         max_date: MaxDate = None,
         from_user: FromUser = None,
+        context: ContextWindow = 0,
+        include_reply_threads: IncludeReplyThreads = False,
         auto_expand_batches: AutoExpandBatches = 2,
         include_total_count: IncludeTotalCount = False,
     ) -> SearchResult:
@@ -302,6 +308,8 @@ def register_tools(mcp: FastMCP) -> None:
             include_total_count=include_total_count,
             thread_scope=thread_scope,
             from_user=from_user,
+            context=context,
+            include_reply_threads=include_reply_threads,
         )
 
     @mcp.tool(
