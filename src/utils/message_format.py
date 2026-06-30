@@ -82,8 +82,7 @@ def _message_supports_streaming_attachment(message) -> bool:
         document = getattr(media, "document", None)
         if not document:
             return False
-        is_voice, is_round_video = _document_voice_and_round_note_flags(document)
-        return not (is_voice or is_round_video)
+        return True
     if media_cls == "MessageMediaVoice":
         return True
     return False
@@ -988,7 +987,7 @@ async def transcribe_voice_messages(
     *,
     client=None,
 ) -> None:
-    """Transcribe voice message dicts in parallel; TaskGroup cancels peers on PremiumRequiredError."""
+    """Transcribe voice and round video message dicts in parallel; TaskGroup cancels peers on PremiumRequiredError."""
     if client is None:
         client = await get_connected_client()
 
@@ -1000,21 +999,25 @@ async def transcribe_voice_messages(
         )
         return
 
-    voice_messages = []
+    media_messages = []
     for msg in messages:
         media = msg.get("media")
-        has_voice_type = (
-            media and isinstance(media, dict) and media.get("type") == "voice"
+        has_video_type = (
+            media
+            and isinstance(media, dict)
+            and media.get("type") in ("voice", "round_video")
         )
         has_transcription = "transcription" in msg
 
-        if has_voice_type and not has_transcription:
-            voice_messages.append(msg)
+        if has_video_type and not has_transcription:
+            media_messages.append(msg)
 
-    if not voice_messages:
+    if not media_messages:
         return
 
-    logger.debug("Found %s voice messages to transcribe", len(voice_messages))
+    logger.debug(
+        "Found %s voice/round messages to transcribe", len(media_messages)
+    )
 
     async def transcribe_task(msg_dict: dict[str, Any]) -> None:
         message_id = msg_dict["id"]
@@ -1024,14 +1027,14 @@ async def transcribe_voice_messages(
         if transcription:
             msg_dict["transcription"] = transcription
             logger.debug(
-                "Transcribed voice message %s: %s...",
+                "Transcribed voice/round message %s: %s...",
                 message_id,
                 transcription[:50],
             )
 
     try:
         async with asyncio.TaskGroup() as tg:
-            for msg_dict in voice_messages:
+            for msg_dict in media_messages:
                 tg.create_task(transcribe_task(msg_dict))
     except ExceptionGroup as eg:
         premium_errors = [
