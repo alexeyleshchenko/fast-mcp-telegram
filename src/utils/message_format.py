@@ -84,6 +84,8 @@ def _message_supports_streaming_attachment(message) -> bool:
             return False
         is_voice, is_round_video = _document_voice_and_round_note_flags(document)
         return not (is_voice or is_round_video)
+    if media_cls == "MessageMediaVoice":
+        return True
     return False
 
 
@@ -492,6 +494,7 @@ def _build_media_placeholder(message) -> dict[str, Any] | None:
                 dur = _first_document_attribute_duration(document)
                 if dur is not None:
                     placeholder["duration_seconds"] = dur
+                _apply_document_mime_and_size(placeholder, document)
 
         case "MessageMediaToDo":
             if todo_list := getattr(media, "todo", None):
