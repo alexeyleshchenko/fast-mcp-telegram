@@ -1,14 +1,14 @@
 {
   "id": null,
   "uid": "fmt-overview",
-  "title": "fast-mcp-telegram \u2014 Telemetry",
+  "title": "fast-mcp-telegram — Telemetry",
   "tags": [
     "fast-mcp-telegram",
     "telemetry"
   ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 8,
+  "version": 9,
   "refresh": "5m",
   "time": {
     "from": "now-30d",
@@ -686,7 +686,7 @@
     {
       "id": 15,
       "type": "barchart",
-      "title": "Tool Calls (all time)",
+      "title": "Tool Calls",
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -699,7 +699,7 @@
       },
       "targets": [
         {
-          "rawSql": "SELECT key AS metric, sum((value->>'calls')::int) AS value FROM telemetry, jsonb_each(payload->'tools') WHERE jsonb_typeof(payload->'tools') = 'object' AND (value->>'calls')::int > 0 AND $__timeFilter(received_at)\n    AND ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%') GROUP BY key ORDER BY value DESC",
+          "rawSql": "WITH hb_ordered AS (\n  SELECT instance_id, received_at, key,\n         (value->>'calls')::int AS cum,\n         LAG((value->>'calls')::int) OVER (\n           PARTITION BY instance_id, key ORDER BY received_at\n         ) AS prev\n  FROM telemetry, jsonb_each(payload->'tools')\n  WHERE jsonb_typeof(payload->'tools') = 'object'\n    AND (value->>'calls')::int > 0\n    AND $__timeFilter(received_at)\n    AND ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%')\n),\ndeltas AS (\n  SELECT key,\n    CASE WHEN prev IS NULL THEN cum\n         WHEN cum >= prev THEN cum - prev\n         ELSE 0 END AS delta\n  FROM hb_ordered\n)\nSELECT key AS metric, SUM(delta) AS value\nFROM deltas WHERE delta > 0\nGROUP BY key ORDER BY value DESC",
           "format": "table",
           "refId": "A"
         }
@@ -756,7 +756,7 @@
       },
       "targets": [
         {
-          "rawSql": "SELECT key AS \"Tool\", sum((value->>'calls')::int) AS \"Calls\", sum((value->>'errors')::int) AS \"Errors\", CASE WHEN sum((value->>'calls')::int) > 0 THEN round(sum((value->>'errors')::int)::numeric / sum((value->>'calls')::int) * 100, 1) ELSE 0 END AS \"Error %\", CASE WHEN sum((value->>'calls')::int) > 0 THEN round(sum((value->>'avg_ms')::bigint * (value->>'calls')::int)::numeric / sum((value->>'calls')::int), 0) ELSE 0 END AS \"Avg ms\" FROM telemetry, jsonb_each(payload->'tools') WHERE jsonb_typeof(payload->'tools') = 'object' AND (value->>'calls')::int > 0 AND $__timeFilter(received_at)\n    AND ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%') GROUP BY key ORDER BY \"Calls\" DESC",
+          "rawSql": "WITH hb_ordered AS (\n  SELECT instance_id, received_at, key,\n         (value->>'calls')::int AS cum_calls,\n         (value->>'errors')::int AS cum_errors,\n         ((value->>'avg_ms')::float * (value->>'calls')::int)::numeric AS cum_weight,\n         LAG((value->>'calls')::int) OVER (PARTITION BY instance_id, key ORDER BY received_at) AS prev_calls,\n         LAG((value->>'errors')::int) OVER (PARTITION BY instance_id, key ORDER BY received_at) AS prev_errors,\n         LAG(((value->>'avg_ms')::float * (value->>'calls')::int)::numeric) OVER (PARTITION BY instance_id, key ORDER BY received_at) AS prev_weight\n  FROM telemetry, jsonb_each(payload->'tools')\n  WHERE jsonb_typeof(payload->'tools') = 'object'\n    AND (value->>'calls')::int > 0\n    AND $__timeFilter(received_at)\n    AND ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%')\n),\ndeltas AS (\n  SELECT key,\n    CASE WHEN prev_calls IS NULL THEN cum_calls\n         WHEN cum_calls >= prev_calls THEN cum_calls - prev_calls\n         ELSE 0 END AS delta_calls,\n    CASE WHEN prev_errors IS NULL THEN cum_errors\n         WHEN cum_errors >= prev_errors THEN cum_errors - prev_errors\n         ELSE 0 END AS delta_errors,\n    CASE WHEN prev_weight IS NULL THEN cum_weight\n         WHEN cum_weight >= prev_weight THEN cum_weight - prev_weight\n         ELSE 0 END AS delta_weight\n  FROM hb_ordered\n)\nSELECT key AS \"Tool\",\n       SUM(delta_calls) AS \"Calls\",\n       SUM(delta_errors) AS \"Errors\",\n       CASE WHEN SUM(delta_calls) > 0\n         THEN ROUND(SUM(delta_errors)::numeric / SUM(delta_calls) * 100, 1)\n         ELSE 0 END AS \"Error %\",\n       CASE WHEN SUM(delta_calls) > 0\n         THEN ROUND(SUM(delta_weight)::numeric / SUM(delta_calls), 0)\n         ELSE 0 END AS \"Avg ms\"\nFROM deltas WHERE delta_calls > 0\nGROUP BY key ORDER BY \"Calls\" DESC",
           "format": "table",
           "refId": "A"
         }
@@ -865,7 +865,7 @@
       },
       "targets": [
         {
-          "rawSql": "SELECT tool_key AS \"Tool\", param_key AS \"Paramset\", SUM((param_value->>'calls')::int) AS \"Calls\", SUM((param_value->>'errors')::int) AS \"Errors\", CASE WHEN SUM((param_value->>'calls')::int) > 0 THEN ROUND(SUM((param_value->>'errors')::numeric) / SUM((param_value->>'calls')::int) * 100, 1) ELSE 0 END AS \"Error %\", CASE WHEN SUM((param_value->>'calls')::int) > 0 THEN ROUND(SUM((param_value->>'duration_ms')::float) / SUM((param_value->>'calls')::int))::int ELSE 0 END AS \"Avg ms\" FROM telemetry, jsonb_each(payload->'tools') AS t(tool_key, tool_value), jsonb_each(tool_value->'param_sets') AS p(param_key, param_value) WHERE jsonb_typeof(payload->'tools') = 'object' AND jsonb_typeof(tool_value->'param_sets') = 'object' AND $__timeFilter(received_at)\n    AND ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%') AND payload->>'ver' >= '0.33.0' GROUP BY tool_key, param_key ORDER BY tool_key, \"Calls\" DESC",
+          "rawSql": "WITH hb_ordered AS (\n  SELECT instance_id, received_at, tool_key, param_key,\n         (param_value->>'calls')::int AS cum_calls,\n         (param_value->>'errors')::int AS cum_errors,\n         ((param_value->>'duration_ms')::float * (param_value->>'calls')::int)::numeric AS cum_weight,\n         LAG((param_value->>'calls')::int) OVER (PARTITION BY instance_id, tool_key, param_key ORDER BY received_at) AS prev_calls,\n         LAG((param_value->>'errors')::int) OVER (PARTITION BY instance_id, tool_key, param_key ORDER BY received_at) AS prev_errors,\n         LAG(((param_value->>'duration_ms')::float * (param_value->>'calls')::int)::numeric) OVER (PARTITION BY instance_id, tool_key, param_key ORDER BY received_at) AS prev_weight\n  FROM telemetry, jsonb_each(payload->'tools') AS t(tool_key, tool_value),\n       jsonb_each(tool_value->'param_sets') AS p(param_key, param_value)\n  WHERE jsonb_typeof(payload->'tools') = 'object'\n    AND jsonb_typeof(tool_value->'param_sets') = 'object'\n    AND $__timeFilter(received_at)\n    AND ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%')\n    AND payload->>'ver' >= '0.33.0'\n),\ndeltas AS (\n  SELECT tool_key, param_key,\n    CASE WHEN prev_calls IS NULL THEN cum_calls\n         WHEN cum_calls >= prev_calls THEN cum_calls - prev_calls\n         ELSE 0 END AS delta_calls,\n    CASE WHEN prev_errors IS NULL THEN cum_errors\n         WHEN cum_errors >= prev_errors THEN cum_errors - prev_errors\n         ELSE 0 END AS delta_errors,\n    CASE WHEN prev_weight IS NULL THEN cum_weight\n         WHEN cum_weight >= prev_weight THEN cum_weight - prev_weight\n         ELSE 0 END AS delta_weight\n  FROM hb_ordered\n)\nSELECT tool_key AS \"Tool\", param_key AS \"Paramset\",\n       SUM(delta_calls) AS \"Calls\",\n       SUM(delta_errors) AS \"Errors\",\n       CASE WHEN SUM(delta_calls) > 0\n         THEN ROUND(SUM(delta_errors)::numeric / SUM(delta_calls) * 100, 1)\n         ELSE 0 END AS \"Error %\",\n       CASE WHEN SUM(delta_calls) > 0\n         THEN ROUND(SUM(delta_weight)::numeric / SUM(delta_calls))::int\n         ELSE 0 END AS \"Avg ms\"\nFROM deltas WHERE delta_calls > 0\nGROUP BY tool_key, param_key ORDER BY tool_key, \"Calls\" DESC",
           "format": "table",
           "refId": "A"
         }
@@ -1038,7 +1038,7 @@
     {
       "id": 19,
       "type": "table",
-      "title": "Mode \u00d7 OS",
+      "title": "Mode × OS",
       "gridPos": {
         "h": 7,
         "w": 12,
