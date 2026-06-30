@@ -31,6 +31,11 @@ class MessageMediaPhoto:
     pass
 
 
+class MessageMediaVoice:
+    def __init__(self, document):
+        self.document = document
+
+
 class DummyDocument:
     def __init__(self, attributes):
         self.attributes = attributes
@@ -50,17 +55,30 @@ def _message_photo() -> MagicMock:
     return m
 
 
+def _message_voice() -> MagicMock:
+    m = MagicMock()
+    m.id = 333
+    doc = DummyDocument([DocumentAttributeAudio(voice=True)])
+    m.media = MessageMediaVoice(doc)
+    return m
+
+
 def test_message_supports_streaming_document_and_photo():
     plain = _message_with_document([])
     assert mf._message_supports_streaming_attachment(plain) is True
     assert mf._message_supports_streaming_attachment(_message_photo()) is True
 
 
-def test_message_supports_streaming_rejects_voice_and_round_video():
+def test_message_supports_streaming_accepts_voice_and_round_video():
     voice = _message_with_document([DocumentAttributeAudio(voice=True)])
-    assert mf._message_supports_streaming_attachment(voice) is False
+    assert mf._message_supports_streaming_attachment(voice) is True
     rnd = _message_with_document([DocumentAttributeVideo(round_message=True)])
-    assert mf._message_supports_streaming_attachment(rnd) is False
+    assert mf._message_supports_streaming_attachment(rnd) is True
+
+
+def test_message_supports_streaming_accepts_message_media_voice():
+    msg = _message_voice()
+    assert mf._message_supports_streaming_attachment(msg) is True
 
 
 def test_message_supports_streaming_no_media():
@@ -134,16 +152,37 @@ async def test_maybe_no_url_when_chat_id_not_int_convertible(http_no_auth_config
 
 
 @pytest.mark.asyncio
-async def test_maybe_no_url_for_voice(http_no_auth_config):
+async def test_maybe_sets_url_for_voice(http_no_auth_config):
     http_no_auth_config.domain = "files.example.test"
+    http_no_auth_config.session_name = "fallback-session"
     set_config(http_no_auth_config)
-    media: dict = {"filename": "v.ogg", "mime_type": "audio/ogg"}
+    msg = _message_with_document([DocumentAttributeAudio(voice=True)])
+    media: dict = {"mime_type": "audio/ogg"}
+
     with patch.object(mf, "mint_attachment_ticket", new_callable=AsyncMock) as mint_m:
-        await mf._maybe_set_attachment_download_url(
-            media, _message_with_document([DocumentAttributeAudio(voice=True)]), -50
-        )
-    assert "attachment_download_url" not in media
-    mint_m.assert_not_awaited()
+        mint_m.return_value = FIXED_TICKET
+        with patch.object(mf, "get_request_token", return_value="req-token-xyz"):
+            await mf._maybe_set_attachment_download_url(media, msg, -50)
+
+    assert "attachment_download_url" in media
+    mint_m.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_maybe_sets_url_for_round_video(http_no_auth_config):
+    http_no_auth_config.domain = "files.example.test"
+    http_no_auth_config.session_name = "fallback-session"
+    set_config(http_no_auth_config)
+    msg = _message_with_document([DocumentAttributeVideo(round_message=True)])
+    media: dict = {"mime_type": "video/mp4"}
+
+    with patch.object(mf, "mint_attachment_ticket", new_callable=AsyncMock) as mint_m:
+        mint_m.return_value = FIXED_TICKET
+        with patch.object(mf, "get_request_token", return_value="req-token-xyz"):
+            await mf._maybe_set_attachment_download_url(media, msg, -51)
+
+    assert "attachment_download_url" in media
+    mint_m.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -197,4 +236,34 @@ async def test_maybe_falls_back_to_session_name_when_no_request_token(
         msg.id,
         filename="p.jpg",
         mime_type="image/jpeg",
+    )
+
+
+@pytest.mark.asyncio
+async def test_transcribe_selects_voice_and_round_video():
+    """transcribe_voice_messages selects both voice and round_video messages."""
+    transcribed_ids: list[int] = []
+
+    async def _fake_transcribe(_client, _chat_entity, msg_id):
+        transcribed_ids.append(msg_id)
+
+    messages = [
+        {"media": {"type": "voice"}, "id": 1},
+        {"media": {"type": "round_video"}, "id": 2},
+        {"media": {"type": "voice"}, "transcription": "already done", "id": 3},
+        {"media": {"type": "photo"}, "id": 4},
+        {"no_media_key": True},
+    ]
+    chat_entity = MagicMock()
+
+    with (
+        patch.object(mf, "_is_user_premium", return_value=True),
+        patch.object(
+            mf, "_transcribe_single_voice_message", side_effect=_fake_transcribe
+        ),
+    ):
+        await mf.transcribe_voice_messages(messages, chat_entity, client=MagicMock())
+
+    assert transcribed_ids == [1, 2], (
+        f"Expected voice(1) and round_video(2) to be transcribed, got {transcribed_ids}"
     )

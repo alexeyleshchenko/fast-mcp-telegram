@@ -71,7 +71,7 @@ def _document_voice_and_round_note_flags(document) -> tuple[bool, bool]:
 
 
 def _message_supports_streaming_attachment(message) -> bool:
-    """Whether attachment HTTP streaming is supported for this message (documents, photos)."""
+    """Whether attachment HTTP streaming is supported for this message (documents, photos, voice)."""
     media = getattr(message, "media", None)
     if not media:
         return False
@@ -79,13 +79,8 @@ def _message_supports_streaming_attachment(message) -> bool:
     if media_cls == "MessageMediaPhoto":
         return True
     if media_cls == "MessageMediaDocument":
-        document = getattr(media, "document", None)
-        if not document:
-            return False
-        return True
-    if media_cls == "MessageMediaVoice":
-        return True
-    return False
+        return getattr(media, "document", None) is not None
+    return media_cls == "MessageMediaVoice"
 
 
 async def _maybe_set_attachment_download_url(
@@ -1015,9 +1010,7 @@ async def transcribe_voice_messages(
     if not media_messages:
         return
 
-    logger.debug(
-        "Found %s voice/round messages to transcribe", len(media_messages)
-    )
+    logger.debug("Found %s voice/round messages to transcribe", len(media_messages))
 
     async def transcribe_task(msg_dict: dict[str, Any]) -> None:
         message_id = msg_dict["id"]
