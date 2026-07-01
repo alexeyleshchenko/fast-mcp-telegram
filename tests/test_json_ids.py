@@ -169,3 +169,63 @@ class TestBuildEntityDict:
         result = build_entity_dict(entity)
         assert "access_hash" not in result
         assert result["id"] == 12345
+
+
+class TestJsonSafeDateTime:
+    """``_json_safe`` must convert ``datetime`` objects to Unix timestamps (int).
+
+    Covers Bug #3: Methods returning ``Updates`` with a ``date`` field fail
+    MCP output validation because ``_json_safe`` turned the ``datetime`` into a
+    string, but the output schema declares ``date: int``.
+    """
+
+    def test_datetime_to_int_timestamp(self):
+        """``datetime`` becomes Unix timestamp int."""
+        import datetime
+
+        dt = datetime.datetime(2026, 7, 1, 23, 1, 40, tzinfo=datetime.timezone.utc)
+        result = _json_safe(dt)
+        assert result == int(dt.timestamp())
+        assert isinstance(result, int)
+
+    def test_datetime_in_dict(self):
+        """Nested ``datetime`` inside a dict is converted to int."""
+        import datetime
+
+        dt = datetime.datetime(2026, 7, 1, 23, 1, 40, tzinfo=datetime.timezone.utc)
+        tl = {"_": "Updates", "date": dt, "seq": 0}
+        result = _json_safe(tl)
+        assert isinstance(result["date"], int)
+        assert result["date"] == int(dt.timestamp())
+
+    def test_datetime_in_nested_dict(self):
+        """``datetime`` inside a nested TL ``to_dict()`` subtree."""
+        import datetime
+
+        dt = datetime.datetime(2026, 7, 1, 23, 1, 40, tzinfo=datetime.timezone.utc)
+        outer = {
+            "_": "UpdateShortMessage",
+            "date": dt,
+            "message": "hello",
+        }
+        result = _json_safe(outer)
+        assert isinstance(result["date"], int)
+        assert result["date"] == int(dt.timestamp())
+
+    def test_naive_datetime_converted(self):
+        """Naive ``datetime`` (no tzinfo) is also converted to int."""
+        import datetime
+
+        dt = datetime.datetime(2026, 7, 1, 23, 1, 40)  # naive
+        result = _json_safe(dt)
+        assert isinstance(result, int)
+        assert result == int(dt.timestamp())
+
+    def test_none_not_affected(self):
+        """``None`` is not affected by the datetime check."""
+        assert _json_safe(None) is None
+
+    def test_int_not_affected(self):
+        """Plain ints are still stringified if > 2^53, not treated as timestamps."""
+        result = _json_safe(42)
+        assert result == 42
