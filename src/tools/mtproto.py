@@ -1,5 +1,6 @@
 import base64
 import contextlib
+import datetime
 import inspect
 import json
 import logging
@@ -175,6 +176,10 @@ def _json_safe(value: Any) -> Any:
             return stringify_int64(value)
         if isinstance(value, bytes):
             return base64.b64encode(value).decode("ascii")
+        if isinstance(value, datetime.datetime):
+            # Datetime objects (e.g. Updates.date) must be int Unix timestamps,
+            # not strings. MCP output schema validates date as integer.
+            return int(value.timestamp())
         if isinstance(value, str):
             try:
                 value.encode("utf-8", "strict")
@@ -195,21 +200,50 @@ def _json_safe(value: Any) -> Any:
         return str(value)
 
 
+def _construct_tl_params(params: dict[str, Any]) -> dict[str, Any]:
+    """Construct Telethon TL objects from all nested dicts in *params*.
+
+    Recursively converts dictionaries with ``_`` key
+    (e.g. ``{"_": "inputChat", "chat_id": 123, "access_hash": "456"}``)
+    into proper Telethon TL objects (``InputChat``).  Handles lists, nested
+    dicts, and mixed structures.  Already-constructed TL objects pass through
+    unchanged.
+
+    This runs unconditionally (before the ``resolve`` check) so that TL dicts
+    work even when entity resolution is disabled.
+    """
+    if not params:
+        return {}
+
+    def _process_value(value: Any) -> Any:
+        if isinstance(value, dict):
+            constructed = _construct_tl_object_from_dict(value)
+            if constructed is not value:  # Construction succeeded
+                return constructed
+            return {k: _process_value(v) for k, v in value.items()}
+        if isinstance(value, list | tuple):
+            return [_process_value(item) for item in value]
+        return value
+
+    return {k: _process_value(v) for k, v in params.items()}
+
+
 async def _resolve_params(params: dict[str, Any]) -> dict[str, Any]:
     """Best-effort resolution of entity-like parameters and TL object construction using Telethon.
 
     Handles entity resolution for: peer, from_peer, to_peer, user, user_id,
     channel, chat, chat_id, users, chats, peers.
 
-    Also handles automatic TL object construction from dictionaries with '_' key.
+    .. note::
+       TL object construction (dict → Telethon type) is done by
+       :func:`_construct_tl_params` which is called before this function
+       in :func:`invoke_mtproto_impl`.  Direct callers should also run
+       ``_construct_tl_params`` first.
     """
     if not params:
         return {}
 
     client = await get_connected_client()
-
-    def _is_list_like(value: Any) -> bool:
-        return isinstance(value, list | tuple)
 
     async def _resolve_one(value: Any) -> Any:
         # Pass-through for already-resolved TL objects
@@ -231,19 +265,6 @@ async def _resolve_params(params: dict[str, Any]) -> dict[str, Any]:
                 return await client.get_input_entity(entity)
         return await client.get_input_entity(value)
 
-    def _process_value(value: Any) -> Any:
-        """Recursively process values for TL object construction and entity resolution."""
-        if isinstance(value, dict):
-            # First try to construct TL objects from dict
-            constructed = _construct_tl_object_from_dict(value)
-            if constructed is not value:  # Construction succeeded
-                return constructed
-            # If construction failed, process nested dict values
-            return {k: _process_value(v) for k, v in value.items()}
-        if _is_list_like(value):
-            return [_process_value(item) for item in value]
-        return value
-
     keys_to_resolve = {
         "peer",
         "from_peer",
@@ -260,20 +281,167 @@ async def _resolve_params(params: dict[str, Any]) -> dict[str, Any]:
 
     resolved: dict[str, Any] = dict(params)
 
-    # First pass: construct TL objects from dictionaries
-    for key in list(resolved.keys()):
-        resolved[key] = _process_value(resolved[key])
+    # TL object construction from nested dicts is done by _construct_tl_params()
+    # before this function is called.  We run it again as a safety net for
+    # callers that skip that step — it's a no-op on already-converted values.
+    resolved = _construct_tl_params(resolved)
 
-    # Second pass: resolve entity-like parameters
+    # Resolve entity-like parameters
     for key in list(resolved.keys()):
         if key in keys_to_resolve:
             value = resolved[key]
-            if _is_list_like(value):
+            if isinstance(value, list | tuple):
                 resolved[key] = [await _resolve_one(v) for v in value]
             else:
                 resolved[key] = await _resolve_one(value)
 
     return resolved
+
+
+async def _convert_peer_types(
+    client,
+    params: dict[str, Any],
+    method_cls,
+) -> dict[str, Any]:
+    """Fix resolved peer types to match the method's expected parameter types.
+
+    Two cases:
+
+    1. **Method expects ``int``** but the value is a peer/input object
+       (``InputPeerChat``, ``InputChat``, etc.) → extract the raw ID
+       (``.chat_id``, ``.user_id``, ``.channel_id``).
+
+       This happens when ``_resolve_params()`` converts an int (e.g.
+       ``chat_id=5417489797``) to ``InputPeerChat``, but the method's
+       signature (e.g. ``AddChatUserRequest.__init__(chat_id: int, ...)``)
+       expects the raw integer, not an ``InputPeer*``.
+
+    2. **Method expects ``Input*``** (string annotation like ``'InputChat'``
+       or ``'TypeInputUser'``) but the value is ``InputPeer*`` → fetch the
+       full entity from cache to construct ``Input*`` with the ``access_hash``.
+    """
+    # Import Telethon TL types — InputChat / InputChannel may not exist
+    # in older Telethon builds, so we handle them conditionally.
+    from telethon.tl.types import (
+        InputPeerChat,
+        InputPeerUser,
+        InputPeerChannel,
+    )
+    try:
+        from telethon.tl.types import InputChat
+    except ImportError:
+        InputChat = None  # not available in this Telethon version
+    try:
+        from telethon.tl.types import InputUser
+    except ImportError:
+        InputUser = None
+    try:
+        from telethon.tl.types import InputChannel
+    except ImportError:
+        InputChannel = None
+
+    # Types from which we can extract a raw peer/user/chat ID.
+    # Key = class, value = attribute name holding the int ID.
+    PEER_TYPES_WITH_ID: dict[type, str] = {
+        InputPeerChat: "chat_id",
+        InputPeerUser: "user_id",
+        InputPeerChannel: "channel_id",
+    }
+    # Add Input* types if they exist in this Telethon build
+    if InputChat is not None:
+        PEER_TYPES_WITH_ID[InputChat] = "chat_id"
+    if InputUser is not None:
+        PEER_TYPES_WITH_ID[InputUser] = "user_id"
+    if InputChannel is not None:
+        PEER_TYPES_WITH_ID[InputChannel] = "channel_id"
+
+    sig = inspect.signature(method_cls.__init__)
+    result = dict(params)
+
+    for name, param in sig.parameters.items():
+        if name == "self" or name not in result:
+            continue
+        value = result[name]
+        expected = param.annotation
+
+        # --- Case 1: method expects int → extract raw ID from peer object ---
+        if expected is int:
+            value_cls = type(value)
+            if value_cls in PEER_TYPES_WITH_ID:
+                id_field = PEER_TYPES_WITH_ID[value_cls]
+                result[name] = getattr(value, id_field)
+                logger.debug(
+                    "Extracted %s.%s = %s for parameter '%s' (method expects int)",
+                    value_cls.__name__,
+                    id_field,
+                    result[name],
+                    name,
+                )
+            continue
+
+        # --- Case 2: method expects Input* (string annotation) but we have InputPeer* ---
+        if not isinstance(expected, str):
+            continue
+
+        expected_name = expected
+        # Strip 'Type' prefix from union annotations: TypeInputUser → InputUser
+        if expected_name.startswith("Type"):
+            expected_stripped = expected_name[4:]
+        else:
+            expected_stripped = expected_name
+
+        # Map expected stripped name → (peer_cls, constructor for full entity).
+        # Only include types that exist in this Telethon build.
+        INPUT_BUILDERS: dict[str, tuple] = {}
+        if InputChat is not None:
+            INPUT_BUILDERS["InputChat"] = (
+                InputPeerChat,
+                lambda e: InputChat(
+                    chat_id=e.id, access_hash=e.access_hash
+                ),
+            )
+        if InputUser is not None:
+            INPUT_BUILDERS["InputUser"] = (
+                InputPeerUser,
+                lambda e: InputUser(
+                    user_id=e.id, access_hash=e.access_hash
+                ),
+            )
+        if InputChannel is not None:
+            INPUT_BUILDERS["InputChannel"] = (
+                InputPeerChannel,
+                lambda e: InputChannel(
+                    channel_id=e.id, access_hash=e.access_hash
+                ),
+            )
+
+        if expected_stripped not in INPUT_BUILDERS:
+            continue
+
+        peer_cls, builder = INPUT_BUILDERS[expected_stripped]
+        if not isinstance(value, peer_cls):
+            continue
+
+        # Fetch the full entity to get the access_hash from cache
+        try:
+            entity = await client.get_entity(value)
+            result[name] = builder(entity)
+            logger.debug(
+                "Converted %s → %s for parameter '%s'",
+                peer_cls.__name__,
+                expected_stripped,
+                name,
+            )
+        except Exception as e:
+            logger.warning(
+                "Could not convert %s → %s for '%s': %s",
+                peer_cls.__name__,
+                expected_stripped,
+                name,
+                e,
+            )
+
+    return result
 
 
 def _resolve_method_class(method_full_name: str):
@@ -462,11 +630,16 @@ async def invoke_mtproto_impl(
                 exception=e,
             )
 
-        # Optional entity resolution
+        # Construct TL objects from dicts + optional entity resolution
         try:
             final_params = params
-            if resolve and isinstance(params, dict):
-                final_params = await _resolve_params(params)
+            if isinstance(params, dict):
+                # Always construct TL objects from nested dicts,
+                # regardless of resolve flag.  Fixes "Cannot cast dict
+                # to Peer" when resolve=false.
+                final_params = _construct_tl_params(params)
+                if resolve:
+                    final_params = await _resolve_params(final_params)
         except Exception as e:
             return log_and_build_error(
                 operation="invoke_mtproto",
@@ -495,6 +668,17 @@ async def invoke_mtproto_impl(
             # offset_id / offset_date / add_offset / hash etc. get defaults
             # instead of a cryptic "missing N required" TypeError.
             _fill_missing_int_defaults(method_cls, sanitized_params)
+
+            # Fix resolved peer types to match method's expected parameter types.
+            # Case 1: method expects int → extract raw ID from InputPeer* / Input*
+            #   (e.g. AddChatUserRequest.__init__(chat_id: int) gets 5417489797
+            #    from InputPeerChat(chat_id=5417489797)).
+            # Case 2: method expects Input* (string annotation) → fetch entity
+            #   and construct Input* with access_hash (e.g. InputPeerChat → InputChat).
+            _client = await get_connected_client()
+            sanitized_params = await _convert_peer_types(
+                _client, sanitized_params, method_cls
+            )
 
             # Create method object and invoke via Telethon
             method_obj = method_cls(**sanitized_params)

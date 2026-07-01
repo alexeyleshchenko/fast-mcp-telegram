@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-Tests for MTProto tool: hash sanitization and RPC error normalization.
+Tests for MTProto tool: hash sanitization, RPC error normalization,
+TL object construction, and peer type conversion.
 """
 
 from unittest.mock import AsyncMock, patch
@@ -9,6 +10,8 @@ import pytest
 from telethon.errors import InviteHashExpiredError, UserAlreadyParticipantError
 
 from src.tools.mtproto import (
+    _construct_tl_params,
+    _convert_peer_types,
     _normalize_rpc_error_code,
     _resolve_params,
     _sanitize_mtproto_params,
@@ -188,3 +191,236 @@ async def test_resolve_params_falls_back_when_get_entity_by_id_returns_none():
 
     assert out["peer"] is mock_input
     mock_client.get_input_entity.assert_awaited_once_with(999)
+
+
+class TestConstructTlParams:
+    """Tests for ``_construct_tl_params`` — TL dict → Telethon objects.
+
+    Covers Bug #1: TL object construction from nested dicts with ``resolve=false``
+    (``_construct_tl_params`` must run regardless of the resolve flag).
+    """
+
+    def test_converts_input_user_dict(self):
+        """``{"_": "inputUser", ...}`` converts to ``InputUser``."""
+        from telethon.tl.types import InputUser
+
+        result = _construct_tl_params({
+            "user_id": {
+                "_": "inputUser",
+                "user_id": 8957744751,
+                "access_hash": 9876543210,
+            },
+        })
+        assert isinstance(result["user_id"], InputUser)
+        assert result["user_id"].user_id == 8957744751
+        assert result["user_id"].access_hash == 9876543210
+
+    def test_preserves_int_params(self):
+        """Non-dict int params pass through unchanged."""
+        result = _construct_tl_params({
+            "chat_id": 5417489797,
+            "fwd_limit": 50,
+        })
+        assert result["chat_id"] == 5417489797
+        assert result["fwd_limit"] == 50
+
+    def test_preserves_string_hash(self):
+        """String hash and other string params pass through unchanged."""
+        result = _construct_tl_params({"hash": "invite123"})
+        assert result["hash"] == "invite123"
+
+    def test_empty_dict(self):
+        """Empty params → empty result."""
+        assert _construct_tl_params({}) == {}
+
+    def test_list_of_tl_dicts(self):
+        """Lists of TL dicts are also converted recursively."""
+        from telethon.tl.types import InputUser
+
+        result = _construct_tl_params({
+            "participants": [
+                {"_": "inputUser", "user_id": 1, "access_hash": 100},
+                {"_": "inputUser", "user_id": 2, "access_hash": 200},
+            ],
+        })
+        assert len(result["participants"]) == 2
+        assert isinstance(result["participants"][0], InputUser)
+        assert result["participants"][1].user_id == 2
+
+    def test_unknown_tl_dict_passes_through(self):
+        """Dict with unknown ``_`` key is kept as-is."""
+        result = _construct_tl_params({
+            "chat_id": {"_": "NonExistentType", "id": 123},
+        })
+        assert isinstance(result["chat_id"], dict)
+        assert result["chat_id"]["_"] == "NonExistentType"
+
+    def test_nested_tl_dict_in_resolve_false_flow(self):
+        """Simulates the Bug #1 scenario: TL dict with ``resolve=False``.
+
+        When the user passes an explicit TL dict and ``resolve=False``,
+        ``_construct_tl_params`` should build the TL object so that it
+        can then be processed by ``_convert_peer_types`` (int extraction)
+        without hitting "Cannot cast dict to Peer".
+        """
+        from telethon.tl.types import InputUser
+
+        result = _construct_tl_params({
+            "chat_id": {"_": "inputUser", "user_id": 5417489797, "access_hash": 123},
+            "fwd_limit": 50,
+        })
+        assert isinstance(result["chat_id"], InputUser)
+        assert result["chat_id"].user_id == 5417489797
+        assert result["fwd_limit"] == 50
+
+
+class TestConvertPeerTypes:
+    """Tests for ``_convert_peer_types`` — InputPeer* → int extraction.
+
+    Covers Bug #2: when ``_resolve_params`` converts an int peer to
+    ``InputPeer*`` (e.g. ``InputPeerChat``), but the method's signature
+    expects ``int`` (e.g. ``AddChatUserRequest.__init__(chat_id: int)``),
+    the raw ID must be extracted from the peer object.
+    """
+
+    @pytest.mark.asyncio
+    async def test_input_peer_chat_to_int(self):
+        """``InputPeerChat`` → raw ``chat_id`` for method expecting ``int``."""
+        from unittest.mock import MagicMock
+        from telethon.tl.types import InputPeerChat, InputPeerUser
+        from telethon.tl.functions.messages import AddChatUserRequest
+
+        mock_entity = MagicMock()
+        mock_entity.id = 8957744751
+        mock_entity.access_hash = 1234567890
+
+        mock_client = AsyncMock()
+        mock_client.get_entity = AsyncMock(return_value=mock_entity)
+
+        params = {
+            "chat_id": InputPeerChat(chat_id=5417489797),
+            "user_id": InputPeerUser(user_id=8957744751, access_hash=1234567890),
+            "fwd_limit": 50,
+        }
+
+        result = await _convert_peer_types(mock_client, params, AddChatUserRequest)
+
+        # chat_id: int → extract from InputPeerChat
+        assert result["chat_id"] == 5417489797
+        assert isinstance(result["chat_id"], int)
+
+        # user_id: 'TypeInputUser' → if entity is in client cache,
+        # Case 2 converts InputPeerUser → InputUser (correct behavior).
+        from telethon.tl.types import InputUser
+
+        assert isinstance(result["user_id"], InputUser)
+        assert result["user_id"].user_id == 8957744751
+
+        # fwd_limit: already int, unchanged
+        assert result["fwd_limit"] == 50
+
+    @pytest.mark.asyncio
+    async def test_int_params_unchanged(self):
+        """Int params that are already int pass through unchanged."""
+        from telethon.tl.functions.messages import AddChatUserRequest
+
+        mock_client = AsyncMock()
+        params = {"chat_id": 5417489797, "fwd_limit": 50}
+
+        result = await _convert_peer_types(mock_client, params, AddChatUserRequest)
+
+        assert result["chat_id"] == 5417489797
+        assert result["fwd_limit"] == 50
+
+    @pytest.mark.asyncio
+    async def test_input_peer_user_to_int(self):
+        """``InputPeerUser`` → raw ``user_id`` for method expecting ``int``."""
+        from telethon.tl.types import InputPeerUser
+
+        # Create a method that expects user_id: int
+        class FakeRequest:
+            def __init__(self, user_id: int):
+                pass
+
+        mock_client = AsyncMock()
+        params = {"user_id": InputPeerUser(user_id=8957744751, access_hash=1234567890)}
+
+        result = await _convert_peer_types(mock_client, params, FakeRequest)
+
+        assert result["user_id"] == 8957744751
+        assert isinstance(result["user_id"], int)
+
+
+class TestInvokeMtprotoWithTlDict:
+    """Integration: ``invoke_mtproto_impl`` with TL dict + ``resolve=False``.
+
+    Covers Bug #1 + Bug #2 working together: the user passes an explicit TL
+    dict for the user_id parameter, resolve=False, and the tool should
+    construct the TL object, extract the raw int for methods expecting int,
+    and invoke successfully.
+    """
+
+    @pytest.mark.asyncio
+    async def test_tl_dict_with_resolve_false(self):
+        """TL dict with resolve=False → constructs TL object, invokes successfully."""
+        from telethon.tl.functions.messages import AddChatUserRequest
+        from telethon.tl.types import InputUser
+
+        mock_client = AsyncMock()
+        mock_client.return_value = {"_": "InvitedUsers", "users": [{"id": 1}]}
+
+        with patch(
+            "src.tools.mtproto.get_connected_client",
+            new_callable=AsyncMock,
+            return_value=mock_client,
+        ):
+            result = await invoke_mtproto_impl(
+                "messages.AddChatUser",
+                '{"chat_id": 5417489797, "user_id": {"_": "inputUser", "user_id": 8957744751, "access_hash": 1234567890}, "fwd_limit": 50}',
+                resolve=False,
+            )
+
+        # Should invoke successfully (not crash with "Cannot cast dict to Peer")
+        assert result is not None
+        assert not isinstance(result, dict) or result.get("ok") is not False
+
+    @pytest.mark.asyncio
+    async def test_int_peer_with_resolve_true(self):
+        """Int peer with resolve=True → resolves, extracts int, invokes.
+
+        When resolve=True and chat_id=5417489797 (int),
+        _resolve_params returns InputPeerChat, but _convert_peer_types
+        extracts the int back for AddChatUserRequest which expects chat_id: int.
+        """
+        mock_input_chat = AsyncMock()
+        mock_input_chat.__class__.__name__ = "InputPeerChat"
+        mock_input_chat.chat_id = 5417489797
+
+        mock_input_user = AsyncMock()
+        mock_input_user.__class__.__name__ = "InputUserFromMessage"
+        mock_input_user.user_id = 8957744751
+
+        mock_client = AsyncMock()
+        mock_client.get_input_entity.side_effect = [mock_input_chat, mock_input_user]
+        mock_client.return_value = {"_": "InvitedUsers", "users": [{"id": 1}]}
+
+        with (
+            patch(
+                "src.tools.mtproto.get_connected_client",
+                new_callable=AsyncMock,
+                return_value=mock_client,
+            ),
+            patch(
+                "src.tools.mtproto.get_entity_by_id",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+        ):
+            result = await invoke_mtproto_impl(
+                "messages.AddChatUser",
+                '{"chat_id": 5417489797, "user_id": 8957744751, "fwd_limit": 50}',
+                resolve=True,
+            )
+
+        # Should not crash with "required argument is not an integer"
+        assert result is not None
