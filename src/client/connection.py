@@ -150,6 +150,11 @@ _current_token: ContextVar[str | None] = ContextVar("_current_token", default=No
 _session_cache: dict[str, tuple[TelegramClient, float]] = {}
 _cache_lock = asyncio.Lock()
 
+# Per-token creation locks — serialise TelegramClient construction per session
+# so two concurrent cold-start callers don't both try to open the same .session file.
+_creation_locks: dict[str, asyncio.Lock] = {}
+_creation_locks_lock = asyncio.Lock()
+
 # Connection failure tracking for circuit breaker and backoff
 _connection_failures: dict[
     str, tuple[int, float]
@@ -465,9 +470,28 @@ async def _load_session_file_for_token(token: str) -> Path:
             raise SessionNotAuthorizedError("Invalid bearer token") from e
 
 
+async def _get_or_create_creation_lock(token: str) -> asyncio.Lock:
+    """Get a per-token lock for serialising client construction.
+
+    Only *building* a new client is serialised per token (whereas the fast
+    cache check under ``_cache_lock`` is always concurrent).  Different
+    tokens may still build clients in parallel.
+    """
+    async with _creation_locks_lock:
+        if token not in _creation_locks:
+            _creation_locks[token] = asyncio.Lock()
+        return _creation_locks[token]
+
+
 async def _get_client_by_token(token: str) -> TelegramClient:
-    """Get or create a TelegramClient instance for the given token."""
-    # Check cache (under lock)
+    """Get or create a TelegramClient instance for the given token.
+
+    Concurrency-safe: two concurrent cold-start callers for the same token
+    do **not** both create a TelegramClient — the per-token creation lock
+    serialises client construction so only one copy of the session file is
+    ever opened.
+    """
+    # ── Fast path: cache hit ──────────────────────────────────────────────
     async with _cache_lock:
         current_time = time.time()
         if token in _session_cache:
@@ -475,49 +499,63 @@ async def _get_client_by_token(token: str) -> TelegramClient:
             _session_cache[token] = (client, current_time)
             return client
 
-    # Cache miss — load session file (may download from S3)
-    local_path = await _load_session_file_for_token(token)
-    if local_path is None:
-        # Cache hit inside _load_session_file_for_token (double-check after download lock)
+    # ── Per-token lock around the slow path ──────────────────────────────
+    # Only one coroutine per token may enter this section at a time.
+    # Different tokens may still create clients in parallel.
+    creation_lock = await _get_or_create_creation_lock(token)
+    async with creation_lock:
+        # Double-check cache after acquiring the per-token lock
         async with _cache_lock:
-            return _session_cache[token][0]
+            if token in _session_cache:
+                return _session_cache[token][0]
 
-    # Build client (NO lock — Telegram I/O, 2-5s)
-    try:
-        client = await _build_telegram_client_for_token(local_path, token)
-    except Exception as e:
-        if _error_message_suggests_auth_issue(e):
-            logger.warning(
-                f"Session file for token {token[:8]}... is invalid — "
-                "keep file for re-authorization via setup page"
-            )
-        _log_client_creation_failed(local_path, token, e)
-        raise
+        # Cache miss — load session file (may download from S3)
+        local_path = await _load_session_file_for_token(token)
+        if local_path is None:
+            # Cache hit inside _load_session_file_for_token (double-check after download lock)
+            async with _cache_lock:
+                return _session_cache[token][0]
 
-    # Insert into cache with LRU eviction (double-check for concurrent inserts)
-    async with _cache_lock:
-        if token in _session_cache:
-            existing_client, _ = _session_cache[token]
-            if existing_client is not client:
-                logger.info(f"Concurrent request already cached token {token[:8]}..., discarding duplicate")
-                try:
-                    if client.is_connected():
-                        await client.disconnect()
-                except Exception:
-                    pass
-            return _session_cache[token][0]
+        # Build client — safe now (only one coroutine per token)
+        try:
+            client = await _build_telegram_client_for_token(local_path, token)
+        except Exception as e:
+            if _error_message_suggests_auth_issue(e):
+                logger.warning(
+                    f"Session file for token {token[:8]}... is invalid — "
+                    "keep file for re-authorization via setup page"
+                )
+            _log_client_creation_failed(local_path, token, e)
+            raise
 
-        max_active = cfg().max_active_sessions
-        evicted = None
-        if len(_session_cache) >= max_active:
-            oldest_token = min(_session_cache, key=lambda k: _session_cache[k][1])
-            evicted = (oldest_token, _session_cache.pop(oldest_token, None))
-            if evicted[1]:
-                logger.info(f"Evicting LRU session: {oldest_token[:8]}...")
-        _session_cache[token] = (client, time.time())
+        # Insert into cache with LRU eviction (double-check for concurrent inserts)
+        async with _cache_lock:
+            if token in _session_cache:
+                existing_client, _ = _session_cache[token]
+                if existing_client is not client:
+                    logger.info(
+                        f"Concurrent request already cached token {token[:8]}..., "
+                        "discarding duplicate"
+                    )
+                    try:
+                        if client.is_connected():
+                            await client.disconnect()
+                    except Exception:
+                        pass
+                return _session_cache[token][0]
 
-    # Eviction I/O outside lock — catch exceptions so the requesting caller
-    # doesn't see an unrelated S3 error for a different session
+            max_active = cfg().max_active_sessions
+            evicted = None
+            if len(_session_cache) >= max_active:
+                oldest_token = min(_session_cache, key=lambda k: _session_cache[k][1])
+                evicted = (oldest_token, _session_cache.pop(oldest_token, None))
+                if evicted[1]:
+                    logger.info(f"Evicting LRU session: {oldest_token[:8]}...")
+            _session_cache[token] = (client, time.time())
+
+    # ── Eviction I/O outside both locks ──────────────────────────────
+    # Catch exceptions so the requesting caller doesn't see an unrelated
+    # S3 error for a different session.
     if evicted and evicted[1]:
         evict_token, (evict_client, _) = evicted
         try:

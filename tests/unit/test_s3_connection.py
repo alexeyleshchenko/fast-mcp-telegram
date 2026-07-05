@@ -5,6 +5,7 @@ _do_evict_io, _evict_session, LRU eviction with S3, cleanup_session_cache,
 disconnect_and_evict_session, and ensure_connection .touch() skip.
 """
 
+import asyncio
 import time
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -567,3 +568,68 @@ class TestCleanupIdleSessionsS3:
             await cleanup_idle_sessions()
 
         assert "error_token" not in _session_cache
+
+
+# --- Concurrent client creation (per-token lock) ---
+
+
+class TestConcurrentClientCreation:
+    """Per-token creation lock serialises TelegramClient construction.
+
+    Two concurrent cold-start callers for the same token both cache-miss,
+    but only one should build a TelegramClient; the other must wait then
+    return the already-cached client from the double-check.
+    """
+
+    @pytest.mark.asyncio
+    async def test_concurrent_calls_create_one_client(self, s3_config, mock_s3):
+        """Two concurrent cold-start calls for the same token create only one client."""
+        from src.client.connection import _get_client_by_token
+
+        build_count = 0
+        started = asyncio.Event()
+        proceed = asyncio.Event()
+
+        async def slow_build(session_path, token):
+            nonlocal build_count
+            build_count += 1
+            started.set()
+            await proceed.wait()
+            return MagicMock()
+
+        mock_cfg = MagicMock()
+        mock_cfg.max_active_sessions = 10
+        mock_cfg.session_directory = s3_config.session_directory
+        mock_cfg.s3_session_storage = True
+        mock_cfg.session_name = "default"
+
+        mock_local_path = MagicMock(spec=Path)
+        mock_local_path.exists.return_value = True
+
+        with (
+            patch("src.client.connection._load_session_file_for_token", return_value=mock_local_path),
+            patch("src.client.connection._build_telegram_client_for_token", slow_build),
+            patch("src.client.connection.cfg", return_value=mock_cfg),
+            patch("src.client.connection.s3_session", mock_s3),
+            patch("src.client.connection._error_message_suggests_auth_issue", return_value=False),
+            patch("src.client.connection._log_client_creation_failed"),
+        ):
+            task1 = asyncio.create_task(_get_client_by_token("concurrent_token"))
+            task2 = asyncio.create_task(_get_client_by_token("concurrent_token"))
+
+            # Wait until the first call enters slow_build, then give task2 time
+            # to reach the per-token lock (where it blocks because task1 holds it)
+            await asyncio.wait_for(started.wait(), timeout=5)
+            await asyncio.sleep(0.2)
+
+            # The second caller should be blocked on creation_lock — only 1 build active
+            assert build_count == 1, "Only one client should be building while the other waits"
+
+            # Release the blocked build
+            proceed.set()
+
+            results = await asyncio.gather(task1, task2, return_exceptions=True)
+
+        assert build_count == 1, "Only one client should ever be created across both callers"
+        assert not any(isinstance(r, Exception) for r in results), f"Got exceptions: {results}"
+        assert results[0] is results[1], "Both callers should return the same client instance"
