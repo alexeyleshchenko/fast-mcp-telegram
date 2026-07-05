@@ -301,12 +301,13 @@ class ServerConfig(BaseSettings):
     @field_validator("host")
     @classmethod
     def validate_host(cls, v: str, info) -> str:
-        """Set smart defaults for host based on server mode."""
-        if not v or v == "127.0.0.1":
-            # Get server_mode from values if available
-            mode = info.data.get("server_mode", ServerMode.STDIO)
-            if mode in (ServerMode.HTTP_AUTH, ServerMode.HTTP_NO_AUTH):
-                return "0.0.0.0"  # Production HTTP should bind to all interfaces
+        """Return the host value as-is; default is 127.0.0.1 from Field.
+
+        Users can override via --host or HOST env var (e.g. ``0.0.0.0`` for
+        Docker/remote deployments).  No longer auto-overrides for HTTP modes,
+        because binding to all interfaces by default is a security concern
+        for auth-sensitive Telegram user clients.
+        """
         return v
 
     @property
