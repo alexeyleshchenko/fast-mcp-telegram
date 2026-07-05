@@ -212,7 +212,7 @@ def main():
             log_level="info",
         )
     else:
-        mcp.run(transport=transport)
+        mcp.run(transport=transport, show_banner=False)
 
 
 # Run the server if this file is executed directly
