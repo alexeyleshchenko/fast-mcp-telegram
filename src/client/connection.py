@@ -549,6 +549,7 @@ async def _get_client_by_token(token: str) -> TelegramClient:
             if len(_session_cache) >= max_active:
                 oldest_token = min(_session_cache, key=lambda k: _session_cache[k][1])
                 evicted = (oldest_token, _session_cache.pop(oldest_token, None))
+                _creation_locks.pop(oldest_token, None)  # cleanup per-token lock
                 if evicted[1]:
                     logger.info(f"Evicting LRU session: {oldest_token[:8]}...")
             _session_cache[token] = (client, time.time())

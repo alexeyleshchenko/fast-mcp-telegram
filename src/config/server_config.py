@@ -308,6 +308,9 @@ class ServerConfig(BaseSettings):
         because binding to all interfaces by default is a security concern
         for auth-sensitive Telegram user clients.
         """
+        if not v:
+            logger.warning("Empty host resolved to 127.0.0.1")
+            return "127.0.0.1"
         return v
 
     @property
