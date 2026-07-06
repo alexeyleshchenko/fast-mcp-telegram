@@ -8,15 +8,14 @@ RUN apk add --no-cache curl
 
 WORKDIR /app
 
-COPY pyproject.toml ./
+COPY pyproject.toml uv.lock ./
 RUN mkdir -p src && touch src/__init__.py
 COPY src/_version.py ./src/_version.py
 
 RUN pip install --no-cache-dir uv && \
-    uv export --frozen --no-dev --no-emit-project -o /tmp/requirements.txt && \
-    uv pip install --system --no-cache -r /tmp/requirements.txt && \
+    uv sync --frozen --no-dev --system --no-install-project && \
     pip uninstall -y uv && \
-    rm -rf /root/.cache/uv /tmp/requirements.txt
+    rm -rf /root/.cache/uv
 
 # Create non-root user for security
 RUN addgroup -g 1000 appuser && \
