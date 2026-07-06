@@ -161,13 +161,15 @@ async def _enrich_with_context(
             f"Context enrichment: {original_count} unique message IDs exceeded "
             f"the {_CONTEXT_MAX_IDS} cap; some context may be missing."
         )
-        logger.warning("Context enrichment: capped IDs to %d (was %d)", _CONTEXT_MAX_IDS, original_count)
+        logger.warning(
+            "Context enrichment: capped IDs to %d (was %d)",
+            _CONTEXT_MAX_IDS,
+            original_count,
+        )
 
     # Step 2: Batch-fetch all needed messages
     try:
-        raw_messages = await _get_messages_by_ids_batched(
-            client, entity, list(all_ids)
-        )
+        raw_messages = await _get_messages_by_ids_batched(client, entity, list(all_ids))
     except FloodWaitError as e:
         wait = getattr(e, "seconds", 0) or 0
         logger.warning("Context enrichment FloodWaitError: wait %ds", wait)
@@ -711,30 +713,22 @@ async def _handle_query_mode(
             len(collected) == limit and len(collected) > 0
         )
 
+        response: dict[str, Any] = {"messages": window, "has_more": has_more}
         if not window:
-            q_nonempty = bool(query and query.strip())
-            if chat_id and not q_nonempty:
+            if chat_id and not (query and query.strip()):
                 if min_date or max_date:
-                    err = (
+                    response["note"] = (
                         "No exportable messages found for the requested date range in this chat. "
                         "If Telegram shows recent dialog activity, it may be service-only "
                         "(e.g. pins, invites, title changes) now surfaced as [Service: …] rows."
                     )
                 else:
-                    err = "No exportable messages found in this chat."
-            elif q_nonempty:
-                err = f"No messages found matching query '{query}'"
+                    response["note"] = "No exportable messages found in this chat."
+            elif query and query.strip():
+                response["note"] = f"No messages found matching query '{query}'"
             else:
-                err = "No messages found for the given filters."
+                response["note"] = "No messages found for the given filters."
 
-            return log_and_build_error(
-                operation="get_messages",
-                error_message=err,
-                params=params,
-                exception=ValueError(err),
-            )
-
-        response: dict[str, Any] = {"messages": window, "has_more": has_more}
         if total_count is not None:
             response["total_count"] = total_count
 

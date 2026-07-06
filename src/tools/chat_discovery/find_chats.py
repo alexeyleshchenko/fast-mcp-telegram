@@ -398,7 +398,12 @@ async def _find_chats_global_multi_term(
             exception=ValueError(f"No contacts found: {error_detail}"),
         )
 
-    return {"chats": _merge_results_round_robin(term_results, limit)}
+    result = _merge_results_round_robin(term_results, limit)
+    response: dict[str, Any] = {"chats": result}
+    if not result:
+        query_str = ", ".join(terms)
+        response["note"] = f"No contacts found matching query '{query_str}'"
+    return response
 
 
 async def _find_chats_by_dialogs(
@@ -445,23 +450,17 @@ async def _find_chats_by_dialogs(
     ):
         results.append(item)
 
-    if results:
-        return {"chats": results}
-
-    date_desc = []
-    if min_date:
-        date_desc.append(f"since {min_date}")
-    if max_date:
-        date_desc.append(f"until {max_date}")
-    date_str = " and ".join(date_desc) if date_desc else "with date filter"
-    query_str = f"matching '{query}' " if query else ""
-
-    return log_and_build_error(
-        operation="find_chats",
-        error_message=f"No chats found {query_str}{date_str}",
-        params=params,
-        exception=ValueError(f"No chats found {query_str}{date_str}"),
-    )
+    response: dict[str, Any] = {"chats": results}
+    if not results:
+        date_desc = []
+        if min_date:
+            date_desc.append(f"since {min_date}")
+        if max_date:
+            date_desc.append(f"until {max_date}")
+        date_str = " and ".join(date_desc) if date_desc else "with date filter"
+        query_str = f"matching '{query}' " if query else ""
+        response["note"] = f"No chats found {query_str}{date_str}"
+    return response
 
 
 async def _find_chats_by_filter(
