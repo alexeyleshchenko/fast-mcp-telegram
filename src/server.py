@@ -196,6 +196,7 @@ def main():
         app = mcp.http_app(
             path="/v1/mcp",
             stateless_http=True,
+            allowed_hosts=["*"],
         )
 
         # Add URL token middleware for clients that can't set headers
@@ -210,6 +211,7 @@ def main():
             host=config.host,
             port=config.port,
             log_level="info",
+            forwarded_allow_ips="*",
         )
     else:
         mcp.run(transport=transport, show_banner=False)
