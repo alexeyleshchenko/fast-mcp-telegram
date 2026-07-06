@@ -39,7 +39,7 @@ USER appuser
 COPY src/ ./src/
 
 # Environment defaults for FastMCP HTTP
-ENV SERVER_MODE=http \
+ENV SERVER_MODE=http-auth \
     HOST=0.0.0.0 \
     PORT=8000 \
     PYTHONUNBUFFERED=1 \
