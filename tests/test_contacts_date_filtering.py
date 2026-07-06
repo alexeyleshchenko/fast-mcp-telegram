@@ -165,7 +165,8 @@ class TestDialogInDateRange:
         dialog = MockDialog(MockUser(1), date=None)
 
         with patch(
-            "src.tools.chat_discovery.date_helpers._get_last_message_date", new_callable=AsyncMock
+            "src.tools.chat_discovery.date_helpers._get_last_message_date",
+            new_callable=AsyncMock,
         ) as mock_fallback:
             mock_fallback.return_value = "2024-06-15T00:00:00+00:00"
 
@@ -185,7 +186,8 @@ class TestDialogInDateRange:
         dialog = MockDialog(MockUser(1), date=None)
 
         with patch(
-            "src.tools.chat_discovery.date_helpers._get_last_message_date", new_callable=AsyncMock
+            "src.tools.chat_discovery.date_helpers._get_last_message_date",
+            new_callable=AsyncMock,
         ) as mock_fallback:
             mock_fallback.return_value = "2023-06-15T00:00:00+00:00"
 
@@ -205,7 +207,8 @@ class TestDialogInDateRange:
         dialog = MockDialog(MockUser(1), date=None)
 
         with patch(
-            "src.tools.chat_discovery.date_helpers._get_last_message_date", new_callable=AsyncMock
+            "src.tools.chat_discovery.date_helpers._get_last_message_date",
+            new_callable=AsyncMock,
         ) as mock_fallback:
             mock_fallback.return_value = "2025-06-15T00:00:00+00:00"
 
@@ -225,7 +228,8 @@ class TestDialogInDateRange:
         dialog = MockDialog(MockUser(1), date=None)
 
         with patch(
-            "src.tools.chat_discovery.date_helpers._get_last_message_date", new_callable=AsyncMock
+            "src.tools.chat_discovery.date_helpers._get_last_message_date",
+            new_callable=AsyncMock,
         ) as mock_fallback:
             mock_fallback.return_value = None
 
@@ -245,7 +249,8 @@ class TestDialogInDateRange:
         dialog = MockDialog(MockUser(1), date=None)
 
         with patch(
-            "src.tools.chat_discovery.date_helpers._get_last_message_date", new_callable=AsyncMock
+            "src.tools.chat_discovery.date_helpers._get_last_message_date",
+            new_callable=AsyncMock,
         ) as mock_fallback:
             mock_fallback.return_value = "not-parseable-as-iso"
 
@@ -391,7 +396,8 @@ class TestBuildDialogEntityDict:
 async def test_find_chats_global_single_term_passes_through():
     """_find_chats_global passes through to _search_contacts_as_list."""
     with patch(
-        "src.tools.chat_discovery.find_chats._search_contacts_as_list", new_callable=AsyncMock
+        "src.tools.chat_discovery.find_chats._search_contacts_as_list",
+        new_callable=AsyncMock,
     ) as mock_search:
         mock_search.return_value = [{"id": 1, "title": "Test"}]
 
@@ -418,7 +424,8 @@ async def test_search_dialogs_impl_respects_max_date():
     mock_client.iter_dialogs = mock_iter_dialogs
 
     with patch(
-        "src.tools.chat_discovery.dialog_search.get_connected_client", new_callable=AsyncMock
+        "src.tools.chat_discovery.dialog_search.get_connected_client",
+        new_callable=AsyncMock,
     ) as mock_get_client:
         mock_get_client.return_value = mock_client
 
@@ -461,7 +468,8 @@ async def test_search_dialogs_impl_respects_min_date():
     mock_client.iter_dialogs = mock_iter_dialogs
 
     with patch(
-        "src.tools.chat_discovery.dialog_search.get_connected_client", new_callable=AsyncMock
+        "src.tools.chat_discovery.dialog_search.get_connected_client",
+        new_callable=AsyncMock,
     ) as mock_get_client:
         mock_get_client.return_value = mock_client
 
@@ -482,7 +490,8 @@ async def test_search_dialogs_impl_respects_min_date():
 async def test_find_chats_impl_without_date_filters_uses_global():
     """When no date filters are provided, find_chats_impl should use _find_chats_global."""
     with patch(
-        "src.tools.chat_discovery.find_chats._search_contacts_as_list", new_callable=AsyncMock
+        "src.tools.chat_discovery.find_chats._search_contacts_as_list",
+        new_callable=AsyncMock,
     ) as mock_search:
         mock_search.return_value = [{"id": 1, "title": "Test"}]
 
@@ -507,7 +516,8 @@ async def test_find_chats_impl_with_date_filters_uses_dialog_search():
     mock_client.iter_dialogs = mock_iter_dialogs
 
     with patch(
-        "src.tools.chat_discovery.dialog_search.get_connected_client", new_callable=AsyncMock
+        "src.tools.chat_discovery.dialog_search.get_connected_client",
+        new_callable=AsyncMock,
     ) as mock_get_client:
         mock_get_client.return_value = mock_client
 
@@ -519,7 +529,7 @@ async def test_find_chats_impl_with_date_filters_uses_dialog_search():
 
 @pytest.mark.asyncio
 async def test_find_chats_impl_date_filter_no_results_returns_error():
-    """When date filters find nothing, should return structured error."""
+    """When date filters find nothing, should return success with empty chats and note."""
 
     async def mock_iter_dialogs(limit=None, folder=None):
         if False:
@@ -529,7 +539,8 @@ async def test_find_chats_impl_date_filter_no_results_returns_error():
     mock_client.iter_dialogs = mock_iter_dialogs
 
     with patch(
-        "src.tools.chat_discovery.dialog_search.get_connected_client", new_callable=AsyncMock
+        "src.tools.chat_discovery.dialog_search.get_connected_client",
+        new_callable=AsyncMock,
     ) as mock_get_client:
         mock_get_client.return_value = mock_client
 
@@ -537,9 +548,10 @@ async def test_find_chats_impl_date_filter_no_results_returns_error():
             query="NoMatch", limit=10, min_date="2099-01-01", max_date="2099-12-31"
         )
 
-        assert "error" in result
-        assert result["operation"] == "find_chats"
-        assert "No chats found" in result["error"]
+        assert "chats" in result
+        assert result["chats"] == []
+        assert "note" in result
+        assert "No chats found" in result["note"]
 
 
 @pytest.mark.asyncio
@@ -590,7 +602,7 @@ async def test_find_chats_global_multi_term_merges_results():
 
 @pytest.mark.asyncio
 async def test_find_chats_global_multi_term_no_results_returns_error():
-    """Multi-term global search with no results should return structured error."""
+    """Multi-term global search with no results should return success with empty chats and note."""
 
     async def mock_gen_empty():
         if False:
@@ -602,9 +614,10 @@ async def test_find_chats_global_multi_term_no_results_returns_error():
     ):
         result = await _find_chats_global("nonexistent1,nonexistent2", 10, None, None)
 
-        assert "error" in result
-        assert result["operation"] == "search_contacts_multi"
-        assert "No contacts found" in result["error"]
+        assert "chats" in result
+        assert result["chats"] == []
+        assert "note" in result
+        assert "No contacts found" in result["note"]
 
 
 # ============== _find_chats_by_include_peers date filtering tests ==============
@@ -652,7 +665,9 @@ async def test_find_chats_by_include_peers_respects_min_date():
     mock_client.get_entity = mock_get_entity
 
     # Patch GetPeerDialogsRequest at the module level so it's recognized but not called
-    with patch("src.tools.chat_discovery.include_peers.GetPeerDialogsRequest", MagicMock()):
+    with patch(
+        "src.tools.chat_discovery.include_peers.GetPeerDialogsRequest", MagicMock()
+    ):
         result = await _find_chats_by_include_peers(
             client=mock_client,
             filter_dict={
@@ -720,7 +735,9 @@ async def test_find_chats_by_include_peers_fallback_iter_messages_uses_per_peer_
     mock_client.get_entity = mock_get_entity
     mock_client.iter_messages = iter_messages
 
-    with patch("src.tools.chat_discovery.include_peers.GetPeerDialogsRequest", MagicMock()):
+    with patch(
+        "src.tools.chat_discovery.include_peers.GetPeerDialogsRequest", MagicMock()
+    ):
         result = await _find_chats_by_include_peers(
             client=mock_client,
             filter_dict={
@@ -766,7 +783,9 @@ async def test_find_chats_get_peer_dialogs_mismatch_warns(caplog):
 
     with (
         caplog.at_level("WARNING", logger="src.tools.chat_discovery.include_peers"),
-        patch("src.tools.chat_discovery.include_peers.GetPeerDialogsRequest", MagicMock()),
+        patch(
+            "src.tools.chat_discovery.include_peers.GetPeerDialogsRequest", MagicMock()
+        ),
     ):
         await _find_chats_by_include_peers(
             client=mock_client,
@@ -816,12 +835,15 @@ async def test_find_chats_by_include_peers_uses_dialog_date_for_flags_entities()
             return include_entity
         return None
 
-    with patch(
-        "src.tools.chat_discovery.include_peers._filter_matches_flags",
-        side_effect=lambda e, d, f: getattr(e, "id", None) == flags_id,
-    ), patch(
-        "src.tools.chat_discovery.include_peers.GetPeerDialogsRequest"
-    ) as mock_gpd:
+    with (
+        patch(
+            "src.tools.chat_discovery.include_peers._filter_matches_flags",
+            side_effect=lambda e, d, f: getattr(e, "id", None) == flags_id,
+        ),
+        patch(
+            "src.tools.chat_discovery.include_peers.GetPeerDialogsRequest"
+        ) as mock_gpd,
+    ):
         mock_client = AsyncMock()
         mock_client.iter_dialogs = mock_iter_dialogs
         mock_client.get_entity = mock_get_entity
@@ -858,8 +880,7 @@ async def test_find_chats_by_include_peers_uses_dialog_date_for_flags_entities()
     # Flags entity should be present with last_activity_date from dialog.date
     flags_result = [c for c in chats if c["id"] == flags_id]
     assert len(flags_result) == 1, (
-        f"Flags entity (id={flags_id}) should be in results. "
-        f"Got chats: {chats}"
+        f"Flags entity (id={flags_id}) should be in results. Got chats: {chats}"
     )
     assert flags_result[0]["last_activity_date"] is not None
     assert "2024-06-15" in flags_result[0]["last_activity_date"], (
@@ -880,8 +901,7 @@ async def test_find_chats_by_include_peers_uses_dialog_date_for_flags_entities()
     # Include entity should also be present with activity from GetPeerDialogsRequest
     include_result = [c for c in chats if c["id"] == include_id]
     assert len(include_result) == 1, (
-        f"Include entity (id={include_id}) should be in results. "
-        f"Got chats: {chats}"
+        f"Include entity (id={include_id}) should be in results. Got chats: {chats}"
     )
     assert "2024-06-10" in include_result[0]["last_activity_date"], (
         f"Expected include entity last_activity from GetPeerDialogsRequest (2024-06-10), "

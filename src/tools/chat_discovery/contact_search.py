@@ -16,7 +16,6 @@ from src.utils.entity import (
     _matches_public_filter,
     build_entity_dict,
 )
-from src.utils.error_handling import log_and_build_error
 
 logger = logging.getLogger(__name__)
 
@@ -95,23 +94,9 @@ async def _search_contacts_as_list(
 ) -> list[dict[str, Any]] | dict[str, Any]:
     """Wrapper to collect generator results into a list for backward compatibility."""
     results = []
-    params = {
-        "query": query,
-        "limit": limit,
-        "chat_type": chat_type,
-        "public": public,
-    }
 
     async for item in search_contacts_native(query, limit, chat_type, public):
         results.append(item)
-
-    if not results:
-        return log_and_build_error(
-            operation="search_contacts",
-            error_message=f"No contacts found matching query '{query}'",
-            params=params,
-            exception=ValueError(f"No contacts found matching query '{query}'"),
-        )
 
     logger.info(f"Found {len(results)} contacts using Telegram search for '{query}'")
     return results

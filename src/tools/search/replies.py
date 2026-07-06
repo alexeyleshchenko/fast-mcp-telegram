@@ -27,9 +27,7 @@ from .types import ThreadScope
 logger = logging.getLogger(__name__)
 
 
-async def _find_topic_from_nearby_messages(
-    client, entity, msg_id: int
-) -> int | None:
+async def _find_topic_from_nearby_messages(client, entity, msg_id: int) -> int | None:
     """Find topic ID by checking a nearby message's topic metadata.
 
     In forum groups, standalone messages may lack reply_to_top_id, but the
@@ -49,11 +47,14 @@ async def _find_topic_from_nearby_messages(
         if meta.get("topic_id") is not None:
             logger.debug(
                 "Nearby msg %d resolved topic %d (forum_topic=%s)",
-                nearby.id, meta["topic_id"],
+                nearby.id,
+                meta["topic_id"],
                 getattr(getattr(nearby, "reply_to", None), "forum_topic", None),
             )
             return meta["topic_id"]
-    logger.debug("No topic found in %d nearby messages after %d", len(nearby_msgs), msg_id)
+    logger.debug(
+        "No topic found in %d nearby messages after %d", len(nearby_msgs), msg_id
+    )
     return None
 
 
@@ -377,12 +378,12 @@ async def _handle_reply_mode(
         has_more = len(collected) > len(window)
 
         if not window:
-            return log_and_build_error(
-                operation="get_messages",
-                error_message=f"No replies found for message {reply_to_id}",
-                params=params,
-                exception=ValueError(f"No replies to message {reply_to_id}"),
-            )
+            return {
+                "messages": [],
+                "has_more": False,
+                "reply_to_id": reply_to_id,
+                "note": f"No replies found for message {reply_to_id}",
+            }
 
         logger.info(
             f"Retrieved {len(window)} replies to message {reply_to_id} in chat {chat_id}"
