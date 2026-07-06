@@ -44,44 +44,23 @@ echo "   Current: ${CURRENT_TAG:-none}  Target: ${VERSION}"
 echo "--- Building ${GHCR_IMAGE}:${VERSION} ---"
 ssh "${REMOTE_HOST}" "cd ${REMOTE_DIR} && docker build -t ${GHCR_IMAGE}:${VERSION} ."
 
-# ------- 4. Deploy via compose ----
+# ------- 4. Deploy via compose & wait for healthy ----
 echo "--- Deploying via compose ---"
-ssh "${REMOTE_HOST}" "cd ${REMOTE_DIR} && IMAGE_TAG=${VERSION} docker compose up -d ${SERVICE}"
-
-# ------- 5. Wait for healthcheck ----
-echo "--- Waiting for healthcheck ---"
-HEALTHY=false
-for i in $(seq 1 15); do
-    STATUS=$(ssh "${REMOTE_HOST}" \
-        "docker inspect --format '{{.State.Health.Status}}' ${CONTAINER_NAME} 2>/dev/null || echo 'missing'")
-    if [ "${STATUS}" = "healthy" ]; then
-        HEALTHY=true
-        break
-    fi
-    echo "  [${i}/15] status=${STATUS}"
-    sleep 4
-done
-
-# ------- 6. Success or rollback ----
-if [ "${HEALTHY}" = "true" ]; then
+if ssh "${REMOTE_HOST}" "cd ${REMOTE_DIR} && IMAGE_TAG=${VERSION} docker compose up -d --wait --wait-timeout 90 ${SERVICE}"; then
     echo "✅ ${VERSION} deployed — healthy."
     # Clean up dangling layers only; keep version-tagged images for rollback
     ssh "${REMOTE_HOST}" "docker image prune -f --filter 'dangling=true'"
     exit 0
 fi
 
-echo "❌ Healthcheck failed after 60s."
+echo "❌ Healthcheck failed within 90s timeout."
 if [ -n "${CURRENT_TAG}" ]; then
     echo "   Rolling back to ${CURRENT_TAG}..."
-    ssh "${REMOTE_HOST}" "cd ${REMOTE_DIR} && IMAGE_TAG=${CURRENT_TAG} docker compose up -d ${SERVICE}"
-    # Wait for rollback health
-    for i in $(seq 1 8); do
-        STATUS=$(ssh "${REMOTE_HOST}" \
-            "docker inspect --format '{{.State.Health.Status}}' ${CONTAINER_NAME} 2>/dev/null || echo 'missing'")
-        [ "${STATUS}" = "healthy" ] && break
-        sleep 4
-    done
-    echo "   Rolled back to ${CURRENT_TAG}."
+    if ssh "${REMOTE_HOST}" "cd ${REMOTE_DIR} && IMAGE_TAG=${CURRENT_TAG} docker compose up -d --wait --wait-timeout 60 ${SERVICE}"; then
+        echo "   Rolled back to ${CURRENT_TAG}."
+    else
+        echo "   Rollback also failed — check container logs."
+    fi
 else
     echo "   No previous tag — manual intervention required."
 fi
