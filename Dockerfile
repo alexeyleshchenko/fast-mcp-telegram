@@ -8,14 +8,21 @@ RUN apk add --no-cache curl
 
 WORKDIR /app
 
+# Copy dependency files first for layer caching
 COPY pyproject.toml uv.lock ./
 RUN mkdir -p src && touch src/__init__.py
 COPY src/_version.py ./src/_version.py
 
-RUN pip install --no-cache-dir uv && \
-    uv sync --frozen --no-dev --system --no-install-project && \
-    pip uninstall -y uv && \
+# Install uv and sync dependencies from lock file into .venv
+# --no-install-project: install deps only, project source comes from filesystem COPY later
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+RUN uv sync --frozen --no-dev --no-install-project && \
     rm -rf /root/.cache/uv
+
+# Configure .venv as active Python environment
+# uv sync creates .venv by default (no --system flag in current uv 0.11.x)
+ENV VIRTUAL_ENV=/app/.venv
+ENV PATH="/app/.venv/bin:$PATH"
 
 # Create non-root user for security
 RUN addgroup -g 1000 appuser && \
@@ -31,10 +38,7 @@ USER appuser
 # Copy real source code (this layer rebuilds when code changes)
 COPY src/ ./src/
 
-# Add local bin to PATH to fix script warnings
-ENV PATH="/home/appuser/.local/bin:$PATH"
-
-# Environment defaults for FastMCP HTTP (SERVER_MODE, HOST, PORT override these)
+# Environment defaults for FastMCP HTTP
 ENV SERVER_MODE=http \
     HOST=0.0.0.0 \
     PORT=8000 \
