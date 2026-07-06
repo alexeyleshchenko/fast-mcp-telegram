@@ -12,10 +12,11 @@ COPY pyproject.toml ./
 RUN mkdir -p src && touch src/__init__.py
 COPY src/_version.py ./src/_version.py
 
-RUN pip install --no-cache-dir uv; \
-    uv pip install --system --no-cache -r pyproject.toml; \
-    pip uninstall -y uv; \
-    rm -rf /root/.cache/uv
+RUN pip install --no-cache-dir uv && \
+    uv export --frozen --no-dev --no-emit-project -o /tmp/requirements.txt && \
+    uv pip install --system --no-cache -r /tmp/requirements.txt && \
+    pip uninstall -y uv && \
+    rm -rf /root/.cache/uv /tmp/requirements.txt
 
 # Create non-root user for security
 RUN addgroup -g 1000 appuser && \
