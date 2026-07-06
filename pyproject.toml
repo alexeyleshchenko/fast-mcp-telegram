@@ -25,7 +25,7 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
-    "fastmcp-slim[server]>=3.3",
+    "fastmcp-slim[server]>=3.3,<3.5",
     "telethon",
     "TelethonFakeTLS",  # For fake TLS (EE prefix) MTProto proxy support
     "jinja2",
