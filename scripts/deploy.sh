@@ -46,7 +46,7 @@ ssh "${REMOTE_HOST}" "cd ${REMOTE_DIR} && docker build -t ${GHCR_IMAGE}:${VERSIO
 
 # ------- 4. Deploy via compose & wait for healthy ----
 echo "--- Deploying via compose ---"
-if ssh "${REMOTE_HOST}" "cd ${REMOTE_DIR} && IMAGE_TAG=${VERSION} docker compose up -d --wait --wait-timeout 90 ${SERVICE}"; then
+if ssh "${REMOTE_HOST}" "cd ${REMOTE_DIR} && IMAGE_TAG=${VERSION} docker compose up --wait --wait-timeout 90 ${SERVICE}"; then
     echo "✅ ${VERSION} deployed — healthy."
     # Clean up dangling layers only; keep version-tagged images for rollback
     ssh "${REMOTE_HOST}" "docker image prune -f --filter 'dangling=true'"
@@ -56,7 +56,7 @@ fi
 echo "❌ Healthcheck failed within 90s timeout."
 if [ -n "${CURRENT_TAG}" ]; then
     echo "   Rolling back to ${CURRENT_TAG}..."
-    if ssh "${REMOTE_HOST}" "cd ${REMOTE_DIR} && IMAGE_TAG=${CURRENT_TAG} docker compose up -d --wait --wait-timeout 60 ${SERVICE}"; then
+    if ssh "${REMOTE_HOST}" "cd ${REMOTE_DIR} && IMAGE_TAG=${CURRENT_TAG} docker compose up --wait --wait-timeout 60 ${SERVICE}"; then
         echo "   Rolled back to ${CURRENT_TAG}."
     else
         echo "   Rollback also failed — check container logs."
