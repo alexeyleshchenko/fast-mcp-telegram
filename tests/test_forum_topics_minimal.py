@@ -29,11 +29,11 @@ async def test_build_message_result_includes_topic_fields_for_forum_chat():
 
     with (
         patch(
-            "src.utils.message_format.get_sender_info",
+            "src.utils.message_format.core.get_sender_info",
             new=AsyncMock(return_value={"id": 1}),
         ),
         patch(
-            "src.utils.message_format._extract_forward_info",
+            "src.utils.message_format.core._extract_forward_info",
             new=AsyncMock(return_value=None),
         ),
     ):
@@ -55,11 +55,11 @@ async def test_build_message_result_topic_fallback_to_message_reply_to_msg_id():
 
     with (
         patch(
-            "src.utils.message_format.get_sender_info",
+            "src.utils.message_format.core.get_sender_info",
             new=AsyncMock(return_value={"id": 1}),
         ),
         patch(
-            "src.utils.message_format._extract_forward_info",
+            "src.utils.message_format.core._extract_forward_info",
             new=AsyncMock(return_value=None),
         ),
     ):
@@ -82,11 +82,11 @@ async def test_build_message_result_topic_fallback_to_reply_object_reply_to_msg_
 
     with (
         patch(
-            "src.utils.message_format.get_sender_info",
+            "src.utils.message_format.core.get_sender_info",
             new=AsyncMock(return_value={"id": 1}),
         ),
         patch(
-            "src.utils.message_format._extract_forward_info",
+            "src.utils.message_format.core._extract_forward_info",
             new=AsyncMock(return_value=None),
         ),
     ):
@@ -109,11 +109,11 @@ async def test_build_message_result_omits_topic_fields_when_forum_topic_has_no_i
 
     with (
         patch(
-            "src.utils.message_format.get_sender_info",
+            "src.utils.message_format.core.get_sender_info",
             new=AsyncMock(return_value={"id": 1}),
         ),
         patch(
-            "src.utils.message_format._extract_forward_info",
+            "src.utils.message_format.core._extract_forward_info",
             new=AsyncMock(return_value=None),
         ),
     ):
@@ -135,11 +135,11 @@ async def test_build_message_result_omits_topic_fields_for_non_forum_chat():
 
     with (
         patch(
-            "src.utils.message_format.get_sender_info",
+            "src.utils.message_format.core.get_sender_info",
             new=AsyncMock(return_value={"id": 1}),
         ),
         patch(
-            "src.utils.message_format._extract_forward_info",
+            "src.utils.message_format.core._extract_forward_info",
             new=AsyncMock(return_value=None),
         ),
     ):

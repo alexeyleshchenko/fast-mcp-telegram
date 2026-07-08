@@ -52,7 +52,7 @@ def _patched_sleep(monkeypatch):
     async def _noop(_seconds: float) -> None:
         return None
 
-    monkeypatch.setattr("src.utils.message_format.asyncio.sleep", _noop)
+    monkeypatch.setattr("src.utils.message_format.transcription.asyncio.sleep", _noop)
 
 
 @pytest.fixture

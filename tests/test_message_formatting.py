@@ -473,7 +473,7 @@ class TestBuildMessageResultExcludeChat:
         client.get_entity = AsyncMock(return_value=entity)
 
         with patch(
-            "src.utils.message_format.get_sender_info",
+            "src.utils.message_format.core.get_sender_info",
             new=AsyncMock(return_value={"id": 789, "name": "Sender"}),
         ):
             result = await build_message_result(
@@ -509,7 +509,7 @@ class TestBuildMessageResultExcludeChat:
         client.get_entity = AsyncMock(return_value=entity)
 
         with patch(
-            "src.utils.message_format.get_sender_info",
+            "src.utils.message_format.core.get_sender_info",
             new=AsyncMock(return_value={"id": 789, "name": "Sender"}),
         ):
             result = await build_message_result(
@@ -544,7 +544,7 @@ class TestBuildMessageResultExcludeChat:
         client.get_entity = AsyncMock(return_value=entity)
 
         with patch(
-            "src.utils.message_format.get_sender_info",
+            "src.utils.message_format.core.get_sender_info",
             new=AsyncMock(return_value={"id": 789, "name": "Sender"}),
         ):
             result = await build_message_result(
@@ -582,7 +582,7 @@ class TestBuildMessageResultServicePlaceholder:
         entity.type = "chat"
 
         with patch(
-            "src.utils.message_format.get_sender_info",
+            "src.utils.message_format.core.get_sender_info",
             new=AsyncMock(return_value={"id": 789, "name": "Sender"}),
         ):
             result = await build_message_result(

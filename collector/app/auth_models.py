@@ -7,11 +7,17 @@ flow_id, method/branch/event/error allowlists.
 from __future__ import annotations
 
 import re
-import time
 from dataclasses import asdict, dataclass, field
 from typing import Any, Literal
 
-from app.models import ValidationError
+from app.payload_validation import (
+    ValidationError,
+    coerce_ts,
+    construct_from_dict,
+    validate_iid,
+    validate_ts,
+    validate_ver,
+)
 
 # --- Allowlists ---
 
@@ -80,18 +86,11 @@ _UUID_RE = re.compile(
 )
 
 
-def _coerce_ts(value: Any) -> int:
-    """Normalize payload timestamps to integer unix seconds."""
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise ValidationError("ts must be an integer")
-    return int(value)
-
-
 def _normalize_auth_payload_dict(data: dict[str, Any]) -> dict[str, Any]:
     """Coerce numeric ts fields before dataclass construction."""
     normalized = dict(data)
     if "ts" in normalized:
-        normalized["ts"] = _coerce_ts(normalized["ts"])
+        normalized["ts"] = coerce_ts(normalized["ts"])
     events = normalized.get("events")
     if isinstance(events, list):
         normalized_events: list[dict[str, Any]] = []
@@ -101,14 +100,10 @@ def _normalize_auth_payload_dict(data: dict[str, Any]) -> dict[str, Any]:
                 continue
             ev_copy = dict(ev)
             if "ts" in ev_copy:
-                ev_copy["ts"] = _coerce_ts(ev_copy["ts"])
+                ev_copy["ts"] = coerce_ts(ev_copy["ts"])
             normalized_events.append(ev_copy)
         normalized["events"] = normalized_events
     return normalized
-
-# Timestamp drift limits (same as TelemetryPayload)
-_FUTURE_DRIFT_SECONDS = 300  # 5 min
-_OLD_WINDOW_SECONDS = 7 * 24 * 3600  # 7 days
 
 
 @dataclass
@@ -138,10 +133,7 @@ class AuthPayload:
             errors.append(f"type must be 'auth', got {self.type!r}")
 
         # --- iid ---
-        if not isinstance(self.iid, str) or not self.iid:
-            errors.append("iid must be a non-empty string")
-        elif len(self.iid) > 128:
-            errors.append(f"iid exceeds 128 chars ({len(self.iid)})")
+        validate_iid(self.iid, errors)
 
         # --- flow_id (UUID) ---
         if not isinstance(self.flow_id, str) or not self.flow_id:
@@ -150,25 +142,10 @@ class AuthPayload:
             errors.append(f"flow_id must be a valid UUID, got {self.flow_id!r}")
 
         # --- ts ---
-        if not isinstance(self.ts, int) or isinstance(self.ts, bool):
-            errors.append("ts must be an integer")
-        else:
-            now = int(time.time())
-            if self.ts > now + _FUTURE_DRIFT_SECONDS:
-                errors.append(
-                    f"ts {self.ts} is {self.ts - now}s in the future "
-                    f"(max {_FUTURE_DRIFT_SECONDS}s)"
-                )
-            if self.ts < now - _OLD_WINDOW_SECONDS:
-                errors.append(
-                    f"ts {self.ts} is {now - self.ts}s old (max {_OLD_WINDOW_SECONDS}s)"
-                )
+        validate_ts(self.ts, errors)
 
         # --- ver ---
-        if not isinstance(self.ver, str) or not self.ver:
-            errors.append("ver must be a non-empty string")
-        elif len(self.ver) > 64:
-            errors.append(f"ver exceeds 64 chars ({len(self.ver)})")
+        validate_ver(self.ver, errors)
 
         # --- method ---
         if not isinstance(self.method, str) or not self.method:
@@ -236,12 +213,4 @@ class AuthPayload:
 
         Rejects extra keys not in the schema.
         """
-        known = set(cls.__dataclass_fields__)
-        extra = set(data) - known
-        if extra:
-            raise ValidationError(f"Unexpected fields: {', '.join(sorted(extra))}")
-        normalized = _normalize_auth_payload_dict(data)
-        try:
-            return cls(**normalized)
-        except TypeError as exc:
-            raise ValidationError(str(exc)) from exc
+        return construct_from_dict(cls, data, normalizer=_normalize_auth_payload_dict)

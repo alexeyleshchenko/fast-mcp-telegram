@@ -9,6 +9,9 @@ import pytest
 from src.config.server_config import set_config
 from src.utils import message_format as mf
 
+_ATTACH = "src.utils.message_format.attachments"
+_TRANSCRIBE = "src.utils.message_format.transcription"
+
 FIXED_TICKET = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 
 
@@ -92,7 +95,7 @@ async def test_maybe_no_url_when_stdio(stdio_config):
     stdio_config.domain = "files.example.test"
     set_config(stdio_config)
     media: dict = {"filename": "a.txt", "mime_type": "text/plain"}
-    with patch.object(mf, "mint_attachment_ticket", new_callable=AsyncMock) as mint_m:
+    with patch(f"{_ATTACH}.mint_attachment_ticket", new_callable=AsyncMock) as mint_m:
         await mf._maybe_set_attachment_download_url(
             media, _message_with_document([]), -100
         )
@@ -105,7 +108,7 @@ async def test_maybe_no_url_when_placeholder_domain(http_no_auth_config):
     http_no_auth_config.domain = "your-domain.com"
     set_config(http_no_auth_config)
     media: dict = {"filename": "a.txt", "mime_type": "text/plain"}
-    with patch.object(mf, "mint_attachment_ticket", new_callable=AsyncMock) as mint_m:
+    with patch(f"{_ATTACH}.mint_attachment_ticket", new_callable=AsyncMock) as mint_m:
         await mf._maybe_set_attachment_download_url(
             media, _message_with_document([]), -100
         )
@@ -118,7 +121,7 @@ async def test_maybe_no_url_when_chat_id_none(http_no_auth_config):
     http_no_auth_config.domain = "files.example.test"
     set_config(http_no_auth_config)
     media: dict = {"filename": "a.txt", "mime_type": "text/plain"}
-    with patch.object(mf, "mint_attachment_ticket", new_callable=AsyncMock) as mint_m:
+    with patch(f"{_ATTACH}.mint_attachment_ticket", new_callable=AsyncMock) as mint_m:
         await mf._maybe_set_attachment_download_url(
             media, _message_with_document([]), None
         )
@@ -131,7 +134,7 @@ async def test_maybe_no_url_when_chat_id_empty_or_whitespace(http_no_auth_config
     http_no_auth_config.domain = "files.example.test"
     set_config(http_no_auth_config)
     msg = _message_with_document([])
-    with patch.object(mf, "mint_attachment_ticket", new_callable=AsyncMock) as mint_m:
+    with patch(f"{_ATTACH}.mint_attachment_ticket", new_callable=AsyncMock) as mint_m:
         for chat_id in ("", "   ", "\t"):
             media: dict = {"filename": "a.txt", "mime_type": "text/plain"}
             await mf._maybe_set_attachment_download_url(media, msg, chat_id)
@@ -145,7 +148,7 @@ async def test_maybe_no_url_when_chat_id_not_int_convertible(http_no_auth_config
     set_config(http_no_auth_config)
     media: dict = {"filename": "a.txt", "mime_type": "text/plain"}
     msg = _message_with_document([])
-    with patch.object(mf, "mint_attachment_ticket", new_callable=AsyncMock) as mint_m:
+    with patch(f"{_ATTACH}.mint_attachment_ticket", new_callable=AsyncMock) as mint_m:
         await mf._maybe_set_attachment_download_url(media, msg, "not-a-chat-id")
     assert "attachment_download_url" not in media
     mint_m.assert_not_awaited()
@@ -159,9 +162,9 @@ async def test_maybe_sets_url_for_voice(http_no_auth_config):
     msg = _message_with_document([DocumentAttributeAudio(voice=True)])
     media: dict = {"mime_type": "audio/ogg"}
 
-    with patch.object(mf, "mint_attachment_ticket", new_callable=AsyncMock) as mint_m:
+    with patch(f"{_ATTACH}.mint_attachment_ticket", new_callable=AsyncMock) as mint_m:
         mint_m.return_value = FIXED_TICKET
-        with patch.object(mf, "get_request_token", return_value="req-token-xyz"):
+        with patch(f"{_ATTACH}.get_request_token", return_value="req-token-xyz"):
             await mf._maybe_set_attachment_download_url(media, msg, -50)
 
     assert "attachment_download_url" in media
@@ -176,9 +179,9 @@ async def test_maybe_sets_url_for_round_video(http_no_auth_config):
     msg = _message_with_document([DocumentAttributeVideo(round_message=True)])
     media: dict = {"mime_type": "video/mp4"}
 
-    with patch.object(mf, "mint_attachment_ticket", new_callable=AsyncMock) as mint_m:
+    with patch(f"{_ATTACH}.mint_attachment_ticket", new_callable=AsyncMock) as mint_m:
         mint_m.return_value = FIXED_TICKET
-        with patch.object(mf, "get_request_token", return_value="req-token-xyz"):
+        with patch(f"{_ATTACH}.get_request_token", return_value="req-token-xyz"):
             await mf._maybe_set_attachment_download_url(media, msg, -51)
 
     assert "attachment_download_url" in media
@@ -193,9 +196,9 @@ async def test_maybe_sets_url_and_mint_args_with_request_token(http_no_auth_conf
     msg = _message_with_document([])
     media: dict = {"filename": "report.pdf", "mime_type": "application/pdf"}
 
-    with patch.object(mf, "mint_attachment_ticket", new_callable=AsyncMock) as mint_m:
+    with patch(f"{_ATTACH}.mint_attachment_ticket", new_callable=AsyncMock) as mint_m:
         mint_m.return_value = FIXED_TICKET
-        with patch.object(mf, "get_request_token", return_value="req-token-xyz"):
+        with patch(f"{_ATTACH}.get_request_token", return_value="req-token-xyz"):
             await mf._maybe_set_attachment_download_url(media, msg, -999)
 
     assert (
@@ -221,9 +224,9 @@ async def test_maybe_falls_back_to_session_name_when_no_request_token(
     msg = _message_photo()
     media: dict = {"filename": "p.jpg", "mime_type": "image/jpeg"}
 
-    with patch.object(mf, "mint_attachment_ticket", new_callable=AsyncMock) as mint_m:
+    with patch(f"{_ATTACH}.mint_attachment_ticket", new_callable=AsyncMock) as mint_m:
         mint_m.return_value = FIXED_TICKET
-        with patch.object(mf, "get_request_token", return_value=None):
+        with patch(f"{_ATTACH}.get_request_token", return_value=None):
             await mf._maybe_set_attachment_download_url(media, msg, 321)
 
     assert (
@@ -257,9 +260,10 @@ async def test_transcribe_selects_voice_and_round_video():
     chat_entity = MagicMock()
 
     with (
-        patch.object(mf, "_is_user_premium", return_value=True),
-        patch.object(
-            mf, "_transcribe_single_voice_message", side_effect=_fake_transcribe
+        patch(f"{_TRANSCRIBE}._is_user_premium", return_value=True),
+        patch(
+            f"{_TRANSCRIBE}._transcribe_single_voice_message",
+            side_effect=_fake_transcribe,
         ),
     ):
         await mf.transcribe_voice_messages(messages, chat_entity, client=MagicMock())

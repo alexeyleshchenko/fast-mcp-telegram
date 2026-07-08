@@ -9,19 +9,16 @@ type checks.  All errors are collected and reported at once.
 
 from __future__ import annotations
 
-import time
 from dataclasses import asdict, dataclass, field
 from typing import Any, Literal
 
-# Maximum allowed heartbeat timestamp drift in seconds.  The collector
-# rejects heartbeats whose ``ts`` is more than this many seconds in the
-# future (clock-skew tolerance) or older than the rejection window.
-_FUTURE_DRIFT_SECONDS = 300  # 5 min
-_OLD_WINDOW_SECONDS = 7 * 24 * 3600  # 7 days
-
-
-class ValidationError(Exception):
-    """The payload failed schema or business-rule validation."""
+from app.payload_validation import (
+    ValidationError,
+    construct_from_dict,
+    validate_iid,
+    validate_ts,
+    validate_ver,
+)
 
 
 @dataclass
@@ -61,25 +58,10 @@ class TelemetryPayload:
             errors.append(f"v must be 1, got {self.v!r}")
 
         # --- iid ---
-        if not isinstance(self.iid, str) or not self.iid:
-            errors.append("iid must be a non-empty string")
-        elif len(self.iid) > 128:
-            errors.append(f"iid exceeds 128 chars ({len(self.iid)})")
+        validate_iid(self.iid, errors)
 
         # --- ts ---
-        if not isinstance(self.ts, int) or isinstance(self.ts, bool):
-            errors.append("ts must be an integer")
-        else:
-            now = int(time.time())
-            if self.ts > now + _FUTURE_DRIFT_SECONDS:
-                errors.append(
-                    f"ts {self.ts} is {self.ts - now}s in the future "
-                    f"(max {_FUTURE_DRIFT_SECONDS}s)"
-                )
-            if self.ts < now - _OLD_WINDOW_SECONDS:
-                errors.append(
-                    f"ts {self.ts} is {now - self.ts}s old (max {_OLD_WINDOW_SECONDS}s)"
-                )
+        validate_ts(self.ts, errors)
 
         # --- started_at ---
         if not isinstance(self.started_at, int) or isinstance(self.started_at, bool):
@@ -88,10 +70,7 @@ class TelemetryPayload:
             errors.append(f"started_at must be >= 0, got {self.started_at}")
 
         # --- ver ---
-        if not isinstance(self.ver, str) or not self.ver:
-            errors.append("ver must be a non-empty string")
-        elif len(self.ver) > 64:
-            errors.append(f"ver exceeds 64 chars ({len(self.ver)})")
+        validate_ver(self.ver, errors)
 
         # --- os ---
         if not isinstance(self.os, str):
@@ -153,11 +132,4 @@ class TelemetryPayload:
 
         Raises ``ValidationError`` on any issue.
         """
-        known = set(cls.__dataclass_fields__)
-        extra = set(data) - known
-        if extra:
-            raise ValidationError(f"Unexpected fields: {', '.join(sorted(extra))}")
-        try:
-            return cls(**data)
-        except TypeError as exc:
-            raise ValidationError(str(exc)) from exc
+        return construct_from_dict(cls, data)

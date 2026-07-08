@@ -377,9 +377,15 @@ class TestPhotoSyntheticFilename:
 
         media: dict = {"type": "photo", "mime_type": "image/jpeg"}
 
-        with patch.object(mf, "mint_attachment_ticket", new_callable=AsyncMock) as mint_m:
+        with patch(
+            "src.utils.message_format.attachments.mint_attachment_ticket",
+            new_callable=AsyncMock,
+        ) as mint_m:
             mint_m.return_value = "test-ticket-uuid"
-            with patch.object(mf, "get_request_token", return_value="tok"):
+            with patch(
+                "src.utils.message_format.attachments.get_request_token",
+                return_value="tok",
+            ):
                 await mf._maybe_set_attachment_download_url(media, msg, -100)
 
         assert "/photo_12345.jpg" in media["attachment_download_url"]
