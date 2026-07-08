@@ -3,18 +3,18 @@
 import logging
 from typing import Any
 
-logger = logging.getLogger(__name__)
-
 from src.client.connection import get_connected_client
 from src.tools.messages import read_messages_by_ids
 from src.utils.entity import get_entity_by_id
 from src.utils.error_handling import log_and_build_error
 from src.utils.message_format import response_attachment_warning
 
-from .replies import _handle_reply_mode
 from .context_enrichment import _enrich_with_context
+from .replies import _handle_reply_mode
 from .search_mode import _DEFAULT_MAX_CONCURRENT, _handle_query_mode
 from .types import MessageRetrievalMode, ThreadScope, resolve_mode
+
+logger = logging.getLogger(__name__)
 
 
 def _build_search_params(

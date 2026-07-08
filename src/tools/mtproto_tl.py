@@ -88,10 +88,8 @@ def _construct_tl_object_from_dict(data: Any) -> Any:
                     # ids arrive as strings; phone/first_name must stay str.
                     annotation = sig.parameters[param_name].annotation
                     if annotation is int and isinstance(value, str):
-                        try:
+                        with contextlib.suppress(ValueError, TypeError):
                             value = int(value)
-                        except (ValueError, TypeError):
-                            pass
                     params[param_name] = value
             else:
                 # Fill missing required int params with 0 so callers that
@@ -271,38 +269,47 @@ async def _convert_peer_types(
     # Import Telethon TL types — InputChat / InputChannel may not exist
     # in older Telethon builds, so we handle them conditionally.
     from telethon.tl.types import (
+        InputPeerChannel,
         InputPeerChat,
         InputPeerUser,
-        InputPeerChannel,
     )
 
+    input_chat_cls = None
+    input_user_cls = None
+    input_channel_cls = None
     try:
         from telethon.tl.types import InputChat
+
+        input_chat_cls = InputChat
     except ImportError:
-        InputChat = None  # not available in this Telethon version
+        pass  # not available in this Telethon version
     try:
         from telethon.tl.types import InputUser
+
+        input_user_cls = InputUser
     except ImportError:
-        InputUser = None
+        pass
     try:
         from telethon.tl.types import InputChannel
+
+        input_channel_cls = InputChannel
     except ImportError:
-        InputChannel = None
+        pass
 
     # Types from which we can extract a raw peer/user/chat ID.
     # Key = class, value = attribute name holding the int ID.
-    PEER_TYPES_WITH_ID: dict[type, str] = {
+    peer_types_with_id: dict[type, str] = {
         InputPeerChat: "chat_id",
         InputPeerUser: "user_id",
         InputPeerChannel: "channel_id",
     }
     # Add Input* types if they exist in this Telethon build
-    if InputChat is not None:
-        PEER_TYPES_WITH_ID[InputChat] = "chat_id"
-    if InputUser is not None:
-        PEER_TYPES_WITH_ID[InputUser] = "user_id"
-    if InputChannel is not None:
-        PEER_TYPES_WITH_ID[InputChannel] = "channel_id"
+    if input_chat_cls is not None:
+        peer_types_with_id[input_chat_cls] = "chat_id"
+    if input_user_cls is not None:
+        peer_types_with_id[input_user_cls] = "user_id"
+    if input_channel_cls is not None:
+        peer_types_with_id[input_channel_cls] = "channel_id"
 
     sig = inspect.signature(method_cls.__init__)
     result = dict(params)
@@ -316,8 +323,8 @@ async def _convert_peer_types(
         # --- Case 1: method expects int → extract raw ID from peer object ---
         if expected is int:
             value_cls = type(value)
-            if value_cls in PEER_TYPES_WITH_ID:
-                id_field = PEER_TYPES_WITH_ID[value_cls]
+            if value_cls in peer_types_with_id:
+                id_field = peer_types_with_id[value_cls]
                 result[name] = getattr(value, id_field)
                 logger.debug(
                     "Extracted %s.%s = %s for parameter '%s' (method expects int)",
@@ -341,27 +348,27 @@ async def _convert_peer_types(
 
         # Map expected stripped name → (peer_cls, constructor for full entity).
         # Only include types that exist in this Telethon build.
-        INPUT_BUILDERS: dict[str, tuple] = {}
-        if InputChat is not None:
-            INPUT_BUILDERS["InputChat"] = (
+        input_builders: dict[str, tuple] = {}
+        if input_chat_cls is not None:
+            input_builders["InputChat"] = (
                 InputPeerChat,
-                lambda e: InputChat(chat_id=e.id, access_hash=e.access_hash),
+                lambda e: input_chat_cls(chat_id=e.id, access_hash=e.access_hash),
             )
-        if InputUser is not None:
-            INPUT_BUILDERS["InputUser"] = (
+        if input_user_cls is not None:
+            input_builders["InputUser"] = (
                 InputPeerUser,
-                lambda e: InputUser(user_id=e.id, access_hash=e.access_hash),
+                lambda e: input_user_cls(user_id=e.id, access_hash=e.access_hash),
             )
-        if InputChannel is not None:
-            INPUT_BUILDERS["InputChannel"] = (
+        if input_channel_cls is not None:
+            input_builders["InputChannel"] = (
                 InputPeerChannel,
-                lambda e: InputChannel(channel_id=e.id, access_hash=e.access_hash),
+                lambda e: input_channel_cls(channel_id=e.id, access_hash=e.access_hash),
             )
 
-        if expected_stripped not in INPUT_BUILDERS:
+        if expected_stripped not in input_builders:
             continue
 
-        peer_cls, builder = INPUT_BUILDERS[expected_stripped]
+        peer_cls, builder = input_builders[expected_stripped]
         if not isinstance(value, peer_cls):
             continue
 

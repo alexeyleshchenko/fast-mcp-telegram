@@ -59,6 +59,7 @@ class ErrorAction(IntEnum):
 def sanitize_params_for_logging(params: dict[str, Any] | None) -> dict[str, Any]:
     """Proxy to logging_utils to avoid circular imports."""
     from src.utils.logging_utils import sanitize_params_for_logging as _impl
+
     return _impl(params)
 
 
@@ -175,9 +176,9 @@ def log_and_build_error(
         Standardized error response dictionary
     """
     # Build flattened error info for logging
-    safe_error_message_for_log = sanitize_params_for_logging({"message": error_message}).get(
-        "message", "error"
-    )
+    safe_error_message_for_log = sanitize_params_for_logging(
+        {"message": error_message}
+    ).get("message", "error")
     log_extra: dict[str, Any] = {
         "operation": operation,
         "error_message": safe_error_message_for_log,

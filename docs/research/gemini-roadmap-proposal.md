@@ -10,8 +10,8 @@ The original report listed these under “future” roadmap item 5. They exist t
 | --- | --- |
 | SSRF-protected URL downloads | [src/tools/messages/security.py](../../src/tools/messages/security.py), [SECURITY.md](../../SECURITY.md) |
 | Attachment streaming | `GET /v1/attachments/{uuid}/{filename}` — [src/server_components/attachment_routes.py](../../src/server_components/attachment_routes.py) |
-| Premium voice transcription | [src/utils/message_format.py](../../src/utils/message_format.py) |
-| Attachment URLs in tool output | [src/utils/message_format.py](../../src/utils/message_format.py) |
+| Premium voice transcription | [src/utils/message_format/transcription.py](../../src/utils/message_format/transcription.py) |
+| Attachment URLs in tool output | [src/utils/message_format/attachments.py](../../src/utils/message_format/attachments.py) |
 
 ## Proposed next-generation features
 

@@ -26,8 +26,7 @@ def _reset_s3_state():
 @pytest.fixture
 def mock_client():
     """Create a mock aiobotocore S3 client."""
-    client = AsyncMock()
-    return client
+    return AsyncMock()
 
 
 @pytest.fixture
@@ -240,7 +239,9 @@ class TestDownload:
                 await s3_session.download("timeout_token", dest)
 
     @pytest.mark.asyncio
-    async def test_os_error_on_write_cleans_up_tmp(self, configure, tmp_path, mock_client):
+    async def test_os_error_on_write_cleans_up_tmp(
+        self, configure, tmp_path, mock_client
+    ):
         """Disk full during atomic write should raise OSError and clean up temp file."""
         from src import s3_session
 
@@ -260,10 +261,12 @@ class TestDownload:
                 raise OSError("No space left on device")
             return original_write_bytes(self, data)
 
-        with patch.object(s3_session, "_get_client", return_value=mock_client), \
-             patch.object(Path, "write_bytes", _fail_write):
-            with pytest.raises(OSError, match="disk full"):
-                await s3_session.download("diskfull_token", dest)
+        with (
+            patch.object(s3_session, "_get_client", return_value=mock_client),
+            patch.object(Path, "write_bytes", _fail_write),
+            pytest.raises(OSError, match="disk full"),
+        ):
+            await s3_session.download("diskfull_token", dest)
 
         # Temp file should be cleaned up even on failure
         assert not tmp_file.exists()
@@ -295,9 +298,11 @@ class TestUpload:
         large_file = tmp_path / "large.session"
         large_file.write_bytes(b"x" * (s3_session.MAX_UPLOAD_BYTES + 1))
 
-        with patch.object(s3_session, "_get_client", return_value=mock_client):
-            with pytest.raises(ValueError, match="too large"):
-                await s3_session.upload("large_token", large_file)
+        with (
+            patch.object(s3_session, "_get_client", return_value=mock_client),
+            pytest.raises(ValueError, match="too large"),
+        ):
+            await s3_session.upload("large_token", large_file)
 
     @pytest.mark.asyncio
     async def test_failure_raises(self, configure, sample_session, mock_client):
@@ -305,9 +310,11 @@ class TestUpload:
 
         mock_client.put_object.side_effect = Exception("S3 error")
 
-        with patch.object(s3_session, "_get_client", return_value=mock_client):
-            with pytest.raises(Exception, match="S3 error"):
-                await s3_session.upload("fail_token", sample_session)
+        with (
+            patch.object(s3_session, "_get_client", return_value=mock_client),
+            pytest.raises(Exception, match="S3 error"),
+        ):
+            await s3_session.upload("fail_token", sample_session)
 
 
 # --- delete() ---
@@ -331,9 +338,11 @@ class TestDelete:
 
         mock_client.delete_object.side_effect = Exception("S3 error")
 
-        with patch.object(s3_session, "_get_client", return_value=mock_client):
-            with pytest.raises(Exception, match="S3 error"):
-                await s3_session.delete("fail_token")
+        with (
+            patch.object(s3_session, "_get_client", return_value=mock_client),
+            pytest.raises(Exception, match="S3 error"),
+        ):
+            await s3_session.delete("fail_token")
 
 
 # --- health_check() ---
@@ -365,9 +374,11 @@ class TestHealthCheck:
         )
         mock_client.head_bucket.side_effect = error
 
-        with patch.object(s3_session, "_get_client", return_value=mock_client):
-            with pytest.raises(RuntimeError, match="access denied"):
-                await s3_session.health_check()
+        with (
+            patch.object(s3_session, "_get_client", return_value=mock_client),
+            pytest.raises(RuntimeError, match="access denied"),
+        ):
+            await s3_session.health_check()
 
     @pytest.mark.asyncio
     async def test_404_raises(self, configure, mock_client):
@@ -381,9 +392,11 @@ class TestHealthCheck:
         )
         mock_client.head_bucket.side_effect = error
 
-        with patch.object(s3_session, "_get_client", return_value=mock_client):
-            with pytest.raises(RuntimeError, match="not found"):
-                await s3_session.health_check()
+        with (
+            patch.object(s3_session, "_get_client", return_value=mock_client),
+            pytest.raises(RuntimeError, match="not found"),
+        ):
+            await s3_session.health_check()
 
     @pytest.mark.asyncio
     async def test_write_failure_raises(self, configure, mock_client):
@@ -392,9 +405,11 @@ class TestHealthCheck:
         mock_client.head_bucket.return_value = {}
         mock_client.put_object.side_effect = Exception("AccessDenied")
 
-        with patch.object(s3_session, "_get_client", return_value=mock_client):
-            with pytest.raises(RuntimeError, match="not writable"):
-                await s3_session.health_check()
+        with (
+            patch.object(s3_session, "_get_client", return_value=mock_client),
+            pytest.raises(RuntimeError, match="not writable"),
+        ):
+            await s3_session.health_check()
 
 
 # --- checkpoint_session() ---
@@ -465,7 +480,9 @@ class TestCheckpointAndUpload:
     async def test_missing_local_file(self, configure, tmp_path):
         from src import s3_session
 
-        result = await s3_session.checkpoint_and_upload("nope", tmp_path / "nope.session")
+        result = await s3_session.checkpoint_and_upload(
+            "nope", tmp_path / "nope.session"
+        )
         assert result is False
 
     @pytest.mark.asyncio
@@ -478,25 +495,35 @@ class TestCheckpointAndUpload:
         assert result is False
 
     @pytest.mark.asyncio
-    async def test_checkpoint_failure_skips_upload(self, configure, sample_session, mock_client):
+    async def test_checkpoint_failure_skips_upload(
+        self, configure, sample_session, mock_client
+    ):
         """When WAL checkpoint fails, skip S3 upload and return False."""
         from src import s3_session
 
-        with patch.object(s3_session, "_get_client", return_value=mock_client), \
-             patch.object(s3_session, "checkpoint_session", return_value=False):
+        with (
+            patch.object(s3_session, "_get_client", return_value=mock_client),
+            patch.object(s3_session, "checkpoint_session", return_value=False),
+        ):
             result = await s3_session.checkpoint_and_upload("ckpt_fail", sample_session)
 
         assert result is False
         mock_client.put_object.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_integrity_failure_skips_upload(self, configure, sample_session, mock_client):
+    async def test_integrity_failure_skips_upload(
+        self, configure, sample_session, mock_client
+    ):
         """When integrity check fails, skip checkpoint+upload and return False."""
         from src import s3_session
 
-        with patch.object(s3_session, "_get_client", return_value=mock_client), \
-             patch.object(s3_session, "verify_session_integrity", return_value=False):
-            result = await s3_session.checkpoint_and_upload("integ_fail", sample_session)
+        with (
+            patch.object(s3_session, "_get_client", return_value=mock_client),
+            patch.object(s3_session, "verify_session_integrity", return_value=False),
+        ):
+            result = await s3_session.checkpoint_and_upload(
+                "integ_fail", sample_session
+            )
 
         assert result is False
         mock_client.put_object.assert_not_called()

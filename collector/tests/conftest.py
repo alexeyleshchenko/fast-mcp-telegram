@@ -44,26 +44,24 @@ class InMemoryStorage:
         source_ip_hash: str,
         payload_hash: str,
     ) -> None:
-        self.events.append({
-            "payload": payload,
-            "source_ip_hash": source_ip_hash,
-            "received_at": datetime.now(UTC),
-            "payload_hash": payload_hash,
-        })
-
-    def count_recent_events(
-        self, instance_id: str, window_hours: int = 24
-    ) -> int:
-        cutoff = datetime.now(UTC) - timedelta(hours=window_hours)
-        return sum(
-            1 for e in self.events
-            if e["payload"].iid == instance_id
-            and e["received_at"] >= cutoff
+        self.events.append(
+            {
+                "payload": payload,
+                "source_ip_hash": source_ip_hash,
+                "received_at": datetime.now(UTC),
+                "payload_hash": payload_hash,
+            }
         )
 
-    def has_exact_payload(
-        self, payload_hash: str, window_seconds: int = 300
-    ) -> bool:
+    def count_recent_events(self, instance_id: str, window_hours: int = 24) -> int:
+        cutoff = datetime.now(UTC) - timedelta(hours=window_hours)
+        return sum(
+            1
+            for e in self.events
+            if e["payload"].iid == instance_id and e["received_at"] >= cutoff
+        )
+
+    def has_exact_payload(self, payload_hash: str, window_seconds: int = 300) -> bool:
         cutoff = datetime.now(UTC) - timedelta(seconds=window_seconds)
         return any(
             e["payload_hash"] == payload_hash and e["received_at"] >= cutoff
@@ -87,9 +85,7 @@ class InMemoryStorage:
     def cleanup_ttl(self, retention_days: int = 90) -> int:
         cutoff = datetime.now(UTC) - timedelta(days=retention_days)
         before = len(self.events)
-        self.events = [
-            e for e in self.events if e["received_at"] >= cutoff
-        ]
+        self.events = [e for e in self.events if e["received_at"] >= cutoff]
         return before - len(self.events)
 
     def close(self) -> None:
@@ -121,7 +117,13 @@ class _TestClient:
     def __init__(self, port: int):
         self._port = port
 
-    def _request(self, method: str, path: str, body: bytes | None = None, headers: dict | None = None):
+    def _request(
+        self,
+        method: str,
+        path: str,
+        body: bytes | None = None,
+        headers: dict | None = None,
+    ):
         conn = HTTPConnection("localhost", self._port, timeout=5)
         try:
             req_headers = {"Content-Type": "application/json"} if body else {}

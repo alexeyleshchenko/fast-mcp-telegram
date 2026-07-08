@@ -104,9 +104,7 @@ principals:
 
     monkeypatch.setattr(mtproto_api, "invoke_mtproto_impl", _noop_invoke)
 
-    response = await mtproto_route(
-        _FakeRequest(body={"params": {}, "params_json": ""})
-    )
+    response = await mtproto_route(_FakeRequest(body={"params": {}, "params_json": ""}))
     assert response.status_code == 403
     payload = _response_json(response)
     assert payload["ok"] is False

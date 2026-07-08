@@ -81,7 +81,7 @@ def client_factory():
 def _clear_transcription_cache():
     """Wipe the module-level transcription cache between tests so they don't
     leak entries into each other."""
-    from src.utils.message_format import _TRANSCRIPTION_CACHE
+    from src.utils.message_format.transcription import _TRANSCRIPTION_CACHE
 
     _TRANSCRIPTION_CACHE.clear()
     yield
@@ -92,7 +92,7 @@ def _clear_transcription_cache():
 @pytest.mark.asyncio
 async def test_within_cooldown_does_not_re_issue_transcribe_audio(client_factory):
     """Second call within the cooldown window must NOT re-issue TranscribeAudio."""
-    from src.utils.message_format import _transcribe_single_voice_message
+    from src.utils.message_format.transcription import _transcribe_single_voice_message
 
     flood = FloodWaitError(request=None, capture=2328)
     client, calls = client_factory([flood])
@@ -116,14 +116,14 @@ async def test_within_cooldown_does_not_re_issue_transcribe_audio(client_factory
 @pytest.mark.asyncio
 async def test_after_cooldown_re_issues_and_succeeds(client_factory, monkeypatch):
     """Once the cooldown window expires, the next call must re-issue and succeed."""
-    from src.utils.message_format import _transcribe_single_voice_message
+    from src.utils.message_format.transcription import _transcribe_single_voice_message
 
     flood = FloodWaitError(request=None, capture=2328)
     success = _make_transcribe_result(text="Возвращаюсь к Ксюше.")
     client, calls = client_factory([flood, success])
 
     # Force a tiny cooldown so the test is fast.
-    import src.utils.message_format as mf
+    import src.utils.message_format.transcription as mf
 
     monkeypatch.setattr(mf.time, "time", lambda: 0.0)
     user = _make_user(12345)
@@ -155,7 +155,7 @@ async def test_after_cooldown_re_issues_and_succeeds(client_factory, monkeypatch
 async def test_pending_transcription_id_is_reused(client_factory):
     """When the first call returns pending, the cached transcription_id
     must be reused on subsequent polls (we must not lose the id across calls)."""
-    from src.utils.message_format import _transcribe_single_voice_message
+    from src.utils.message_format.transcription import _transcribe_single_voice_message
 
     # First TranscribeAudio call returns pending. The internal polling loop
     # then re-issues TranscribeAudio and gets the completed text. Total
@@ -184,7 +184,7 @@ async def test_cache_is_per_peer(client_factory, monkeypatch):
     """The same msg_id in a different chat must not be conflated with the
     rate-limited one — the rate-limit is per (account, message), so keying
     on (peer_id, msg_id) means a fresh chat starts cold."""
-    from src.utils.message_format import _transcribe_single_voice_message
+    from src.utils.message_format.transcription import _transcribe_single_voice_message
 
     flood = FloodWaitError(request=None, capture=2328)
     success = _make_transcribe_result(text="Другой чат")
@@ -221,8 +221,8 @@ async def test_cache_is_per_peer_kind():
     hit for a user account could shadow a channel post with the same
     numeric id, returning the wrong transcription text.
     """
-    import src.utils.message_format as mf
-    from src.utils.message_format import _TranscriptionCacheEntry
+    import src.utils.message_format.transcription as mf
+    from src.utils.message_format.transcription import _TranscriptionCacheEntry
 
     class _Channel:
         """Stand-in for a Telethon Channel entity — class name carries the
@@ -280,8 +280,8 @@ async def test_cache_is_per_peer_kind():
 async def test_done_entry_evicted_after_ttl(client_factory, monkeypatch):
     """A cached done entry must expire after _DONE_TTL_SECONDS so that the
     next call re-issues the request rather than returning a stale value."""
-    import src.utils.message_format as mf
-    from src.utils.message_format import _transcribe_single_voice_message
+    import src.utils.message_format.transcription as mf
+    from src.utils.message_format.transcription import _transcribe_single_voice_message
 
     success_1 = _make_transcribe_result(text="Свежий текст")
     success_2 = _make_transcribe_result(text="Обновлённый текст")
@@ -314,7 +314,7 @@ async def test_done_entry_evicted_after_ttl(client_factory, monkeypatch):
 async def test_resume_pending_transcription_across_calls(client_factory, monkeypatch):
     """A second call within _PENDING_TTL_SECONDS must resume polling the
     same transcription_id rather than kicking off a new transcription."""
-    from src.utils.message_format import _transcribe_single_voice_message
+    from src.utils.message_format.transcription import _transcribe_single_voice_message
 
     # First call kicks off, gets pending. The internal polling loop fires
     # one more request and gets a second pending response. The first call
@@ -349,7 +349,7 @@ async def test_resume_pending_transcription_across_calls(client_factory, monkeyp
 def test_cache_pruning_keeps_size_under_cap(monkeypatch):
     """When the cache exceeds _TRANSCRIPTION_CACHE_MAX, the oldest 25% of
     entries must be evicted on the next set."""
-    from src.utils import message_format as mf
+    from src.utils.message_format import transcription as mf
 
     mf._TRANSCRIPTION_CACHE.clear()
     now = mf.time.time()
@@ -390,8 +390,8 @@ async def test_resume_cached_pending_does_not_re_kickoff(client_factory, monkeyp
     is skipped (fixed path), the polling loop consumes the SECOND response
     (with the cached id) and returns that text.
     """
-    import src.utils.message_format as mf
-    from src.utils.message_format import (
+    import src.utils.message_format.transcription as mf
+    from src.utils.message_format.transcription import (
         _transcribe_single_voice_message,
         _transcription_cache_set,
         _TranscriptionCacheEntry,
@@ -445,7 +445,7 @@ async def test_resume_cached_pending_does_not_re_kickoff(client_factory, monkeyp
 def test_lru_recency_updated_on_cache_hit(monkeypatch):
     """Touching a key via _transcription_cache_get must move it to the end
     of the dict so frequently-used keys survive pruning."""
-    from src.utils import message_format as mf
+    from src.utils.message_format import transcription as mf
 
     mf._TRANSCRIPTION_CACHE.clear()
     # Use the real entry shape with TTL so is_done is True.
@@ -470,7 +470,7 @@ def test_state_method_is_consistent_at_ttl_boundary():
     timestamp so an entry cannot simultaneously appear done and pending
     at a TTL boundary (where the old per-property time.time() calls raced).
     """
-    from src.utils.message_format import _TranscriptionCacheEntry
+    from src.utils.message_format.transcription import _TranscriptionCacheEntry
 
     now = 1_000_000.0
     # An entry whose done TTL just expired at `now`.

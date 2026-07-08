@@ -257,7 +257,8 @@ class TestGetFilterByName:
         mock_client = MagicMock()
 
         with patch(
-            "src.tools.chat_discovery.dialog_filters.get_dialog_filters", new_callable=AsyncMock
+            "src.tools.chat_discovery.dialog_filters.get_dialog_filters",
+            new_callable=AsyncMock,
         ) as mock_filters:
             mock_filters.return_value = [
                 {"id": 1, "title": "Work", "contacts": True},
@@ -273,7 +274,8 @@ class TestGetFilterByName:
         mock_client = MagicMock()
 
         with patch(
-            "src.tools.chat_discovery.dialog_filters.get_dialog_filters", new_callable=AsyncMock
+            "src.tools.chat_discovery.dialog_filters.get_dialog_filters",
+            new_callable=AsyncMock,
         ) as mock_filters:
             mock_filters.return_value = [
                 {"id": 1, "title": "Work"},
@@ -292,7 +294,8 @@ class TestGetFilterByName:
         mock_client = MagicMock()
 
         with patch(
-            "src.tools.chat_discovery.dialog_filters.get_dialog_filters", new_callable=AsyncMock
+            "src.tools.chat_discovery.dialog_filters.get_dialog_filters",
+            new_callable=AsyncMock,
         ) as mock_filters:
             mock_filters.return_value = [{"id": 1, "title": "Work"}]
 
@@ -308,7 +311,8 @@ class TestGetFilterByName:
         mock_client = MagicMock()
 
         with patch(
-            "src.tools.chat_discovery.dialog_filters.get_dialog_filters", new_callable=AsyncMock
+            "src.tools.chat_discovery.dialog_filters.get_dialog_filters",
+            new_callable=AsyncMock,
         ) as mock_filters:
             mock_filters.return_value = [{"id": 1, "title": "Work"}]
 
@@ -337,7 +341,8 @@ class TestSearchDialogsImplFolder:
         mock_client.iter_dialogs = mock_iter_dialogs
 
         with patch(
-            "src.tools.chat_discovery.dialog_search.get_connected_client", new_callable=AsyncMock
+            "src.tools.chat_discovery.dialog_search.get_connected_client",
+            new_callable=AsyncMock,
         ) as mock_get_client:
             mock_get_client.return_value = mock_client
 
@@ -366,12 +371,14 @@ class TestFindChatsImplFilter:
         mock_client.iter_dialogs = mock_iter_dialogs
 
         with patch(
-            "src.tools.chat_discovery.find_chats.get_connected_client", new_callable=AsyncMock
+            "src.tools.chat_discovery.find_chats.get_connected_client",
+            new_callable=AsyncMock,
         ) as mock_get_client:
             mock_get_client.return_value = mock_client
 
             with patch(
-                "src.tools.chat_discovery.dialog_filters.get_dialog_filters", new_callable=AsyncMock
+                "src.tools.chat_discovery.dialog_filters.get_dialog_filters",
+                new_callable=AsyncMock,
             ) as mock_filters:
                 mock_filters.return_value = [
                     {"id": 1, "title": "Work", "include_peers": [], "groups": True}
@@ -385,7 +392,8 @@ class TestFindChatsImplFilter:
     async def test_filter_param_none_uses_global_search(self):
         """When no filter (None), should use global search."""
         with patch(
-            "src.tools.chat_discovery.find_chats._search_contacts_as_list", new_callable=AsyncMock
+            "src.tools.chat_discovery.find_chats._search_contacts_as_list",
+            new_callable=AsyncMock,
         ) as mock_search:
             mock_search.return_value = [{"id": 1, "title": "Test"}]
 
@@ -409,12 +417,14 @@ class TestFindChatsImplFilter:
         mock_client.iter_dialogs = mock_iter_dialogs
 
         with patch(
-            "src.tools.chat_discovery.find_chats.get_connected_client", new_callable=AsyncMock
+            "src.tools.chat_discovery.find_chats.get_connected_client",
+            new_callable=AsyncMock,
         ) as mock_get_client:
             mock_get_client.return_value = mock_client
 
             with patch(
-                "src.tools.chat_discovery.dialog_filters.get_dialog_filters", new_callable=AsyncMock
+                "src.tools.chat_discovery.dialog_filters.get_dialog_filters",
+                new_callable=AsyncMock,
             ) as mock_filters:
                 mock_filters.return_value = [
                     {"id": 1, "title": "Work", "include_peers": [], "groups": True}
@@ -424,14 +434,14 @@ class TestFindChatsImplFilter:
 
                 assert "chats" in result
 
-
     @pytest.mark.asyncio
     async def test_unknown_filter_returns_error(self):
         """When filter name is not found, should return error with available filters."""
         mock_client = MagicMock()
 
         with patch(
-            "src.tools.chat_discovery.find_chats.get_connected_client", new_callable=AsyncMock
+            "src.tools.chat_discovery.find_chats.get_connected_client",
+            new_callable=AsyncMock,
         ) as mock_get_client:
             mock_get_client.return_value = mock_client
 

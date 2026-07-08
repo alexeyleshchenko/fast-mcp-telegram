@@ -57,16 +57,22 @@ async def test_create_session_generates_unique_ids(manager, mock_telethon_client
 
 
 @pytest.mark.asyncio
-async def test_create_session_raises_qr_login_error_on_failure(manager, mock_telethon_client):
+async def test_create_session_raises_qr_login_error_on_failure(
+    manager, mock_telethon_client
+):
     """create_session raises QrLoginError when Telethon qr_login() fails."""
     mock_telethon_client.qr_login.side_effect = RuntimeError("Telethon error")
 
-    with pytest.raises(QrLoginError, match="Failed to create Telegram QR login session"):
+    with pytest.raises(
+        QrLoginError, match="Failed to create Telegram QR login session"
+    ):
         await manager.create_session(mock_telethon_client)
 
 
 @pytest.mark.asyncio
-async def test_create_session_raises_qr_login_error_on_empty_url(manager, mock_telethon_client):
+async def test_create_session_raises_qr_login_error_on_empty_url(
+    manager, mock_telethon_client
+):
     """create_session raises QrLoginError when Telethon returns empty URL."""
     mock_qr_login = MagicMock()
     mock_qr_login.url = ""
@@ -232,7 +238,9 @@ async def test_regenerate_qr(manager, mock_telethon_client):
 
 
 @pytest.mark.asyncio
-async def test_regenerate_qr_unknown_session_returns_none(manager, mock_telethon_client):
+async def test_regenerate_qr_unknown_session_returns_none(
+    manager, mock_telethon_client
+):
     """regenerate_qr returns None when called with an unknown session id."""
     result = await manager.regenerate_qr("non-existent-session", mock_telethon_client)
     assert result is None
@@ -300,9 +308,7 @@ async def test_poll_status_2fa_required(manager, mock_telethon_client):
 
     mock_qr_login = MagicMock()
     mock_qr_login.url = "tg://login?token=abc"
-    mock_qr_login.wait = AsyncMock(
-        side_effect=SessionPasswordNeededError(request=None)
-    )
+    mock_qr_login.wait = AsyncMock(side_effect=SessionPasswordNeededError(request=None))
     mock_telethon_client.qr_login.return_value = mock_qr_login
     mock_telethon_client.disconnect = AsyncMock()
 
@@ -322,15 +328,15 @@ async def test_poll_status_2fa_required(manager, mock_telethon_client):
 
 
 @pytest.mark.asyncio
-async def test_poll_status_2fa_required_preserves_status_across_calls(manager, mock_telethon_client):
+async def test_poll_status_2fa_required_preserves_status_across_calls(
+    manager, mock_telethon_client
+):
     """Once '2fa_required', poll_status continues returning it."""
     from telethon.errors import SessionPasswordNeededError
 
     mock_qr_login = MagicMock()
     mock_qr_login.url = "tg://login?token=abc"
-    mock_qr_login.wait = AsyncMock(
-        side_effect=SessionPasswordNeededError(request=None)
-    )
+    mock_qr_login.wait = AsyncMock(side_effect=SessionPasswordNeededError(request=None))
     mock_telethon_client.qr_login.return_value = mock_qr_login
 
     session_id, _ = await manager.create_session(mock_telethon_client)
@@ -387,9 +393,7 @@ async def test_cleanup_expired_removes_2fa_sessions(manager, mock_telethon_clien
 
     mock_qr_login = MagicMock()
     mock_qr_login.url = "tg://login?token=abc"
-    mock_qr_login.wait = AsyncMock(
-        side_effect=SessionPasswordNeededError(request=None)
-    )
+    mock_qr_login.wait = AsyncMock(side_effect=SessionPasswordNeededError(request=None))
     mock_telethon_client.qr_login.return_value = mock_qr_login
     mock_telethon_client.disconnect = AsyncMock()
 

@@ -11,9 +11,7 @@ from src.tools.search.search_mode import _handle_query_mode
 @pytest.mark.asyncio
 @patch("src.tools.search.search_mode._collect_messages_in_chat", new_callable=AsyncMock)
 @patch("src.tools.search.search_mode.get_connected_client", new_callable=AsyncMock)
-async def test_handle_query_mode_empty_search_returns_note(
-    mock_client, mock_collect
-):
+async def test_handle_query_mode_empty_search_returns_note(mock_client, mock_collect):
     """Real _handle_query_mode path: empty collection → success + note."""
     mock_collect.return_value = None
     mock_client.return_value = MagicMock()

@@ -3,6 +3,7 @@
 
 Run with: uv run python3 tests/integration/test_date_filtering.py
 """
+
 import asyncio
 
 from src.client.connection import get_connected_client
@@ -32,7 +33,9 @@ async def run_date_filtering_test():
         # Find a chat that has messages (not just a contact)
         if hasattr(entity, "username") and entity.username:
             test_chat_id = str(entity.id)
-            test_chat_title = getattr(entity, "title", None) or getattr(entity, "first_name", "Unknown")
+            test_chat_title = getattr(entity, "title", None) or getattr(
+                entity, "first_name", "Unknown"
+            )
             print(f"Selected chat: {test_chat_title} (id={test_chat_id})")
             break
 
@@ -58,9 +61,7 @@ async def run_date_filtering_test():
     # Test 2: Browse with min_date (recent messages only)
     print("\n--- Test 2: Browse with min_date=2024-01-01 ---")
     result = await search_messages_impl(
-        chat_id=test_chat_id,
-        min_date="2024-01-01",
-        limit=10
+        chat_id=test_chat_id, min_date="2024-01-01", limit=10
     )
     if "error" in result:
         print(f"ERROR: {result['error']}")
@@ -77,9 +78,7 @@ async def run_date_filtering_test():
     # Test 3: Browse with max_date (old messages only)
     print("\n--- Test 3: Browse with max_date=2023-01-01 ---")
     result = await search_messages_impl(
-        chat_id=test_chat_id,
-        max_date="2023-01-01",
-        limit=10
+        chat_id=test_chat_id, max_date="2023-01-01", limit=10
     )
     if "error" in result:
         print(f"ERROR: {result['error']}")
@@ -97,10 +96,7 @@ async def run_date_filtering_test():
     print("\n--- Test 4: Search with min_date ---")
     # Try to search for something common that might exist
     result = await search_messages_impl(
-        chat_id=test_chat_id,
-        query="the",
-        min_date="2024-01-01",
-        limit=10
+        chat_id=test_chat_id, query="the", min_date="2024-01-01", limit=10
     )
     if "error" in result:
         print(f"ERROR: {result['error']}")
@@ -116,9 +112,7 @@ async def run_date_filtering_test():
     if msgs:
         msg_id = msgs[0].get("id")
         result = await search_messages_impl(
-            chat_id=test_chat_id,
-            message_ids=[msg_id],
-            min_date="2024-01-01"
+            chat_id=test_chat_id, message_ids=[msg_id], min_date="2024-01-01"
         )
         if "error" in result:
             print(f"CORRECTLY ERRORED: {result['error']}")

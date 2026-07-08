@@ -4,7 +4,7 @@ Tests for reply markup extraction functionality.
 
 from unittest.mock import MagicMock
 
-from src.utils.message_format import _extract_reply_markup
+from src.utils.message_format.core import _extract_reply_markup
 
 
 class TestReplyMarkupExtraction:

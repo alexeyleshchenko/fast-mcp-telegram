@@ -23,7 +23,7 @@ from src.client.connection import generate_bearer_token
 from src.utils.logging_utils import mask_phone_number
 
 from .config.server_config import ServerConfig, ServerMode
-from .telemetry import flush_auth_events, buffer_auth_event
+from .telemetry import buffer_auth_event, flush_auth_events
 from .utils.mcp_config import generate_mcp_config_json
 from .utils.proxy import build_mtproto_client_args
 

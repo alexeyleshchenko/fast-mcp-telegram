@@ -551,7 +551,9 @@ class TestBuildMessageResultExcludeChat:
                 msg, entity, link="https://t.me/testchat/123"
             )
 
-        assert "chat" not in result, f"Expected no 'chat' field by default, got {result.keys()}"
+        assert "chat" not in result, (
+            f"Expected no 'chat' field by default, got {result.keys()}"
+        )
 
 
 class TestBuildMessageResultServicePlaceholder:

@@ -6,7 +6,8 @@
 - **Cycle 2 (structure/docs):** `context_enrichment.py` extract; shared `auth_errors.categorize_auth_error`; operator docs (empty `note`, attachments, HOST, deploy.sh); ADR 0011/0012 accepted; telemetry trace sanitization; `.env.remote` gitignored.
 - **Re-review verdict:** nitpicks only (uncommitted new modules must be included when committing).
 - **Clean breaks (2026-07-09):** `buffer_auth_event`, `include_replies`, public `extract_topic_metadata` / `parse_telegram_url`, `mtproto_tl.py` split, ADR 0011 review notes → `docs/research/`.
-- **Next:** commit branch when ready; optional `message_format` package split remains on roadmap.
+- **`message_format` package split (2026-07-09):** `src/utils/message_format.py` → `src/utils/message_format/` (`__init__.py`, `core.py`, `attachments.py`, `transcription.py`) in working tree.
+- **Next:** commit branch when ready.
 
 ---
 
@@ -34,7 +35,7 @@
 **Completed**: Todo list `completed_by` JSON safety (2026-04-14)
 
 - `MessageMediaToDo` stored raw Telethon `Peer` in `media.items[].completed_by`, breaking `pydantic_core.to_jsonable_python` and MCP `structuredContent` when `outputSchema` is set.
-- Fix: [`_todo_completed_by_to_int`](src/utils/message_format.py) via [`_forward_peer_id_and_type_label`](src/utils/entity.py); only sets `completed_by` when resolvable to `int`.
+- Fix: [`_todo_completed_by_to_int`](src/utils/message_format/core.py) via [`_forward_peer_id_and_type_label`](src/utils/entity.py); only sets `completed_by` when resolvable to `int`.
 - Tests: [`tests/test_todo_media_placeholder.py`](tests/test_todo_media_placeholder.py).
 
 ---

@@ -97,8 +97,7 @@ def _validate_url_security(url: str) -> tuple[bool, str]:
             if ipaddress.ip_address(ip_str).is_loopback:
                 return (
                     False,
-                    f"Loopback IP blocked after DNS resolution: "
-                    f"{hostname} → {ip_str}",
+                    f"Loopback IP blocked after DNS resolution: {hostname} → {ip_str}",
                 )
 
             if config.block_private_ips:

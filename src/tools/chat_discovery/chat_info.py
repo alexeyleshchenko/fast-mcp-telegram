@@ -107,4 +107,3 @@ async def get_chat_info_impl(chat_id: str, topics_limit: int = 20) -> dict[str, 
             logger.debug("Failed to fetch forum topics for %s: %s", chat_id, e)
 
     return info
-

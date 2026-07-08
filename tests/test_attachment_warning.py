@@ -13,18 +13,14 @@ class TestResponseAttachmentWarning:
         """No warning in stdio mode even with placeholder domain and media."""
         stdio_config.domain = "your-domain.com"
         set_config(stdio_config)
-        result = mf.response_attachment_warning(
-            [{"id": 1, "media": {"type": "photo"}}]
-        )
+        result = mf.response_attachment_warning([{"id": 1, "media": {"type": "photo"}}])
         assert result is None
 
     def test_warning_returns_none_when_valid_domain(self, http_no_auth_config):
         """No warning when domain resolves to a valid public URL."""
         http_no_auth_config.domain = "tg-mcp.example.com"
         set_config(http_no_auth_config)
-        result = mf.response_attachment_warning(
-            [{"id": 1, "media": {"type": "photo"}}]
-        )
+        result = mf.response_attachment_warning([{"id": 1, "media": {"type": "photo"}}])
         assert result is None
 
     def test_warning_returns_none_when_no_media(self, http_no_auth_config):
@@ -52,7 +48,10 @@ class TestResponseAttachmentWarning:
         result = mf.response_attachment_warning(
             [
                 {"id": 1, "text": "hello"},
-                {"id": 2, "media": {"filename": "test.pdf", "mime_type": "application/pdf"}},
+                {
+                    "id": 2,
+                    "media": {"filename": "test.pdf", "mime_type": "application/pdf"},
+                },
             ]
         )
         assert isinstance(result, str)
@@ -66,9 +65,7 @@ class TestResponseAttachmentWarning:
         """localhost is now a placeholder — warning should fire."""
         http_no_auth_config.domain = "localhost"
         set_config(http_no_auth_config)
-        result = mf.response_attachment_warning(
-            [{"id": 1, "media": {"type": "photo"}}]
-        )
+        result = mf.response_attachment_warning([{"id": 1, "media": {"type": "photo"}}])
         assert isinstance(result, str)
         assert "localhost" in result
 
@@ -76,9 +73,7 @@ class TestResponseAttachmentWarning:
         """Raw IP addresses like 144.31.188.163 are NOT placeholders — no warning."""
         http_no_auth_config.domain = "144.31.188.163"
         set_config(http_no_auth_config)
-        result = mf.response_attachment_warning(
-            [{"id": 1, "media": {"type": "photo"}}]
-        )
+        result = mf.response_attachment_warning([{"id": 1, "media": {"type": "photo"}}])
         assert result is None
 
     def test_warning_returns_none_when_multiple_messages_no_media(
@@ -112,7 +107,9 @@ class TestResponseAttachmentWarning:
 class TestValidateConfigDomainWarning:
     """Tests that validate_config logs a warning when DOMAIN is a placeholder."""
 
-    def test_validate_config_logs_warning_when_placeholder(self, http_auth_config, caplog):
+    def test_validate_config_logs_warning_when_placeholder(
+        self, http_auth_config, caplog
+    ):
         """validate_config should log a warning when domain is your-domain.com."""
         http_auth_config.domain = "your-domain.com"
         with caplog.at_level(logging.WARNING):
@@ -121,8 +118,7 @@ class TestValidateConfigDomainWarning:
                 del http_auth_config._config_logged
             http_auth_config.validate_config()
         assert any(
-            "DOMAIN is 'your-domain.com'" in record.message
-            for record in caplog.records
+            "DOMAIN is 'your-domain.com'" in record.message for record in caplog.records
         )
 
     def test_validate_config_no_warning_when_valid_domain(

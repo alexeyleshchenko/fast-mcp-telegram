@@ -106,10 +106,12 @@ class TestStripChannelPrefix:
 async def test_get_entity_by_id_strips_prefix(mock_get_client):
     """get_entity_by_id should try stripped channel ID for -100 prefixed inputs."""
     mock_client = MagicMock()
-    mock_client.get_entity = AsyncMock(side_effect=[
-        Exception("raw -1001234567890 failed"),  # raw peer fails
-        MagicMock(id=1234567890),                 # PeerChannel(1234567890) succeeds
-    ])
+    mock_client.get_entity = AsyncMock(
+        side_effect=[
+            Exception("raw -1001234567890 failed"),  # raw peer fails
+            MagicMock(id=1234567890),  # PeerChannel(1234567890) succeeds
+        ]
+    )
     mock_get_client.return_value = mock_client
 
     from src.utils.entity import get_entity_by_id
@@ -123,6 +125,7 @@ async def test_get_entity_by_id_strips_prefix(mock_get_client):
     assert calls[0][0][0] == -1001234567890  # raw peer (int)
     # PeerChannel(1234567890) — stripped version
     from telethon.tl.types import PeerChannel
+
     assert calls[1][0][0] == PeerChannel(1234567890)
 
 
@@ -131,10 +134,12 @@ async def test_get_entity_by_id_strips_prefix(mock_get_client):
 async def test_get_entity_by_id_int_with_prefix(mock_get_client):
     """get_entity_by_id should strip -100 from int inputs too."""
     mock_client = MagicMock()
-    mock_client.get_entity = AsyncMock(side_effect=[
-        Exception("raw -1001234567890 failed"),  # raw peer fails
-        MagicMock(id=1234567890),                 # PeerChannel(1234567890) succeeds
-    ])
+    mock_client.get_entity = AsyncMock(
+        side_effect=[
+            Exception("raw -1001234567890 failed"),  # raw peer fails
+            MagicMock(id=1234567890),  # PeerChannel(1234567890) succeeds
+        ]
+    )
     mock_get_client.return_value = mock_client
 
     from src.utils.entity import get_entity_by_id

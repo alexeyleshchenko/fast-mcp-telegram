@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 # --- S3 client lifecycle manager ---
 
+
 class _S3ClientManager:
     """Encapsulates S3 client lifecycle: creation, caching, shutdown coordination.
 
@@ -69,9 +70,7 @@ class _S3ClientManager:
                 return self._client
             # No cached client — block new creation during shutdown
             if self._shutting_down:
-                raise RuntimeError(
-                    "S3 client shutting down — cannot create new client"
-                )
+                raise RuntimeError("S3 client shutting down — cannot create new client")
             session = aiobotocore.session.get_session()
             self._client = await session.create_client(
                 "s3",
@@ -87,7 +86,9 @@ class _S3ClientManager:
         """Close S3 client. Used for both reset (stale TCP) and shutdown cleanup."""
         async with self._lock:
             old = self._client
-            self._client = None  # Clear reference BEFORE __aexit__ — avoids stale ref on exception
+            self._client = (
+                None  # Clear reference BEFORE __aexit__ — avoids stale ref on exception
+            )
             if old is not None:
                 try:
                     await old.__aexit__(None, None, None)
@@ -99,10 +100,11 @@ _manager = _S3ClientManager()
 
 MAX_DOWNLOAD_BYTES = 10 * 1024 * 1024  # 10MB
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # 20MB — reject corrupted runaway sessions
-_S3_KEY_RE = re.compile(r'^[a-zA-Z0-9._-]{1,256}$')
+_S3_KEY_RE = re.compile(r"^[a-zA-Z0-9._-]{1,256}$")
 
 
 # --- Module-level convenience functions (delegate to _manager) ---
+
 
 def configure(bucket: str):
     """Set the S3 bucket name. Called once at startup."""
@@ -202,7 +204,7 @@ async def download(token: str, dest: Path) -> None:
         await asyncio.to_thread(os.rename, str(tmp_path), str(dest))
     except ClientError as e:
         # S3 raises ClientError(NoSuchKey), not FileNotFoundError
-        if e.response['Error']['Code'] == 'NoSuchKey':
+        if e.response["Error"]["Code"] == "NoSuchKey":
             raise FileNotFoundError(f"Session {token[:8]}... not found in S3") from e
         raise
     except FileNotFoundError:
@@ -253,23 +255,30 @@ async def health_check() -> None:
     try:
         await client.head_bucket(Bucket=bucket)
     except ClientError as e:
-        code = e.response['Error']['Code']
-        if code == '403':
-            raise RuntimeError(f"S3 bucket '{bucket}' access denied — check credentials") from e
-        if code == '404':
+        code = e.response["Error"]["Code"]
+        if code == "403":
+            raise RuntimeError(
+                f"S3 bucket '{bucket}' access denied — check credentials"
+            ) from e
+        if code == "404":
             raise RuntimeError(f"S3 bucket '{bucket}' not found") from e
         raise
     # Verify write access (small put, will be overwritten on next health check)
     try:
         await client.put_object(
-            Bucket=bucket, Key=".health-check", Body=b"",
+            Bucket=bucket,
+            Key=".health-check",
+            Body=b"",
             Metadata={"purpose": "health"},
         )
     except Exception as e:
-        raise RuntimeError(f"S3 bucket '{bucket}' readable but not writable: {e}") from e
+        raise RuntimeError(
+            f"S3 bucket '{bucket}' readable but not writable: {e}"
+        ) from e
 
 
 # --- SQLite helpers (separate connection, not Telethon's _conn) ---
+
 
 async def checkpoint_session(session_path: Path) -> bool:
     """Flush SQLite WAL using a separate connection.
@@ -279,6 +288,7 @@ async def checkpoint_session(session_path: Path) -> bool:
 
     Returns False if checkpoint fails (caller should skip S3 upload).
     """
+
     def _checkpoint():
         conn = sqlite3.connect(str(session_path), timeout=5)
         try:
@@ -288,7 +298,9 @@ async def checkpoint_session(session_path: Path) -> bool:
                 return False
             # row[0]: 0=success, 1=busy(write txn), 2=busy(WAL read)
             if row[0] != 0:
-                logger.warning(f"Checkpoint busy for {session_path.name}: code={row[0]}")
+                logger.warning(
+                    f"Checkpoint busy for {session_path.name}: code={row[0]}"
+                )
             return row[0] == 0
         finally:
             conn.close()
@@ -302,6 +314,7 @@ async def checkpoint_session(session_path: Path) -> bool:
 
 async def verify_session_integrity(session_path: Path) -> bool:
     """Check SQLite integrity. Runs in thread pool."""
+
     def _check():
         conn = sqlite3.connect(str(session_path), timeout=5)
         try:
@@ -309,6 +322,7 @@ async def verify_session_integrity(session_path: Path) -> bool:
             return result.fetchone()[0] == "ok"
         finally:
             conn.close()
+
     try:
         return await asyncio.to_thread(_check)
     except Exception:
@@ -325,7 +339,9 @@ async def checkpoint_and_upload(token: str, local_path: Path) -> bool:
         logger.error(f"Cannot checkpoint+upload: local file missing for {token[:8]}...")
         return False
     if not await verify_session_integrity(local_path):
-        logger.error(f"Pre-upload integrity check failed for {token[:8]}..., skipping upload")
+        logger.error(
+            f"Pre-upload integrity check failed for {token[:8]}..., skipping upload"
+        )
         return False
     if not await checkpoint_session(local_path):
         logger.warning(f"Checkpoint failed for {token[:8]}..., skipping S3 upload")

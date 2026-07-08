@@ -136,9 +136,7 @@ class TestServerCard:
         import json
 
         card = json.loads(resp.body)
-        transport_types = [
-            r["transport"]["type"] for r in card["remotes"]
-        ]
+        transport_types = [r["transport"]["type"] for r in card["remotes"]]
         assert "streamable-http" in transport_types
         assert "stdio" in transport_types
 

@@ -3,6 +3,7 @@
 
 Run with: uv run python3 tests/integration/test_get_messages_timing.py
 """
+
 import asyncio
 import json
 import signal
@@ -11,7 +12,9 @@ import sys
 import time
 from datetime import datetime
 
-sys.path.insert(0, "/Users/leshchenko/coding_projects/vds/deployed_projects/fast-mcp-telegram")
+sys.path.insert(
+    0, "/Users/leshchenko/coding_projects/vds/deployed_projects/fast-mcp-telegram"
+)
 
 from fastmcp import Client
 from fastmcp.client.transports.stdio import StdioTransport
@@ -46,7 +49,9 @@ async def main():
             since = "2026-04-16"
             limit = 1000
 
-            print(f"Calling get_messages with chat_id={chat_id}, min_date={since}, limit={limit}")
+            print(
+                f"Calling get_messages with chat_id={chat_id}, min_date={since}, limit={limit}"
+            )
             start = time.time()
             print(f"Starting at {datetime.now().isoformat()}")
 
@@ -76,12 +81,13 @@ async def main():
         proc.terminate()
         proc.wait(timeout=5)
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("MCP timing test completed")
-    print('='*60)
+    print("=" * 60)
 
 
 if __name__ == "__main__":
+
     def timeout_handler(signum, frame):
         print("\n[TIMEOUT] Test exceeded 30 seconds, exiting...")
         sys.exit(1)

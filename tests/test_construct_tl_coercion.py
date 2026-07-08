@@ -7,8 +7,6 @@ Covers:
 - _resolve_one handling URL strings via parse_telegram_url
 """
 
-import pytest
-
 from src.tools.mtproto_tl import _construct_tl_object_from_dict
 
 

@@ -47,7 +47,7 @@ def _pg_is_available() -> bool:
     without ``docker compose up``).
     """
     try:
-        import psycopg2  # noqa: F811
+        import psycopg2
 
         dsn = _pg_dsn()
         conn = psycopg2.connect(dsn, connect_timeout=3)
@@ -63,7 +63,6 @@ if not _pg_is_available():
         allow_module_level=True,
     )
 
-import psycopg2  # noqa: E402 — guaranteed available after skip check
 
 # -- Fixtures -----------------------------------------------------------------
 
@@ -148,6 +147,7 @@ def client(e2e_server):
 def valid_payload():
     """A valid telemetry payload dict."""
     from collector.tests._helpers import make_nested_payload
+
     return make_nested_payload()
 
 
@@ -164,7 +164,7 @@ def _fetch_all(storage) -> list[dict]:
         cur.execute("SELECT * FROM telemetry ORDER BY id")
         columns = [desc[0] for desc in cur.description]
         rows = cur.fetchall()
-        return [dict(zip(columns, row)) for row in rows]
+        return [dict(zip(columns, row, strict=False)) for row in rows]
 
 
 # -- Tests --------------------------------------------------------------------
@@ -241,6 +241,7 @@ class TestE2ECollect:
     def test_rate_limit_postgres(self, client, pg_storage):
         """Exceeding per-instance rate limit returns 429."""
         from app.services import INSTANCE_RATE_LIMIT
+
         from collector.tests._helpers import make_nested_payload
 
         # Send up to the limit
@@ -267,6 +268,7 @@ class TestE2ECollect:
     def test_different_instance_not_rate_limited(self, client, pg_storage):
         """Events from different iids don't interfere with rate limiting."""
         from app.services import INSTANCE_RATE_LIMIT
+
         from collector.tests._helpers import make_nested_payload
 
         # Saturate one iid
@@ -333,8 +335,8 @@ class TestE2ECollect:
                 counters={"total_calls": i, "errors": 0},
             )
             # Bypass the HTTP layer — store directly
-            from app.services import compute_payload_hash, hash_source_ip
             from app.models import TelemetryPayload
+            from app.services import compute_payload_hash, hash_source_ip
 
             payload = TelemetryPayload.from_dict(data)
             pg_storage.store(
@@ -372,7 +374,5 @@ class TestE2ECollect:
 
         # Verify it's gone
         with pg_storage._conn.cursor() as cur:
-            cur.execute(
-                "SELECT 1 FROM telemetry WHERE instance_id = 'old-test'"
-            )
+            cur.execute("SELECT 1 FROM telemetry WHERE instance_id = 'old-test'")
             assert cur.fetchone() is None

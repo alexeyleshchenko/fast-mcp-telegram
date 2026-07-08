@@ -46,7 +46,9 @@ class BenchScenario:
     tool: str  # "find_chats" or "search_messages"
     params: dict[str, Any] = field(default_factory=dict)
     iterations: int = 5
-    timeout: float = 30.0  # reserved; not enforced by runner (asyncio.wait_for corrupts MTProto)
+    timeout: float = (
+        30.0  # reserved; not enforced by runner (asyncio.wait_for corrupts MTProto)
+    )
     cooldown: float = 0.0
     smoke: bool = False
     description: str = ""
@@ -145,7 +147,9 @@ class ScenarioRunner:
         n_clean = 0
         n_floodwait_exceeded = 0
 
-        print(f"  {scenario.name} ({n_iterations} iter{'s' if n_iterations > 1 else ''})")
+        print(
+            f"  {scenario.name} ({n_iterations} iter{'s' if n_iterations > 1 else ''})"
+        )
 
         for i in range(n_iterations):
             start = time.monotonic()
@@ -165,7 +169,7 @@ class ScenarioRunner:
                             )
                             if result.get("warning"):
                                 print(
-                                    f"    ⚠️  iter {i+1} WARNING: {result['warning']}"
+                                    f"    ⚠️  iter {i + 1} WARNING: {result['warning']}"
                                 )
                     break
                 except Exception as e:
@@ -178,14 +182,14 @@ class ScenarioRunner:
                             or floodwait_retries > self.floodwait_max_retry
                         ):
                             error = (
-                                f"FloodWaitExceeded:{wait-1}s>cap:"
+                                f"FloodWaitExceeded:{wait - 1}s>cap:"
                                 f"{self.floodwait_cap}s"
                             )
                             n_floodwait_exceeded += 1
-                            print(f"    ⏳ iter {i+1}: {error}")
+                            print(f"    ⏳ iter {i + 1}: {error}")
                             break
                         print(
-                            f"    ⏳ iter {i+1}: FloodWait {wait-1}s "
+                            f"    ⏳ iter {i + 1}: FloodWait {wait - 1}s "
                             f"(retry {floodwait_retries})"
                         )
                         await asyncio.sleep(wait)
@@ -201,10 +205,10 @@ class ScenarioRunner:
                 results_counts.append(results_count)
                 errors.append(error)
                 status = error if error else f"{elapsed:.1f}s"
-                print(f"    iter {i+1}: {status} ({results_count} results)")
+                print(f"    iter {i + 1}: {status} ({results_count} results)")
             else:
                 print(
-                    f"    iter {i+1}: SKIPPED (FloodWait retries={floodwait_retries}, "
+                    f"    iter {i + 1}: SKIPPED (FloodWait retries={floodwait_retries}, "
                     f"{elapsed:.1f}s wasted)"
                 )
 

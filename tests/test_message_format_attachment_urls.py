@@ -8,6 +8,10 @@ import pytest
 
 from src.config.server_config import set_config
 from src.utils import message_format as mf
+from src.utils.message_format.attachments import (
+    _maybe_set_attachment_download_url,
+    _message_supports_streaming_attachment,
+)
 
 _ATTACH = "src.utils.message_format.attachments"
 _TRANSCRIBE = "src.utils.message_format.transcription"
@@ -68,26 +72,26 @@ def _message_voice() -> MagicMock:
 
 def test_message_supports_streaming_document_and_photo():
     plain = _message_with_document([])
-    assert mf._message_supports_streaming_attachment(plain) is True
-    assert mf._message_supports_streaming_attachment(_message_photo()) is True
+    assert _message_supports_streaming_attachment(plain) is True
+    assert _message_supports_streaming_attachment(_message_photo()) is True
 
 
 def test_message_supports_streaming_accepts_voice_and_round_video():
     voice = _message_with_document([DocumentAttributeAudio(voice=True)])
-    assert mf._message_supports_streaming_attachment(voice) is True
+    assert _message_supports_streaming_attachment(voice) is True
     rnd = _message_with_document([DocumentAttributeVideo(round_message=True)])
-    assert mf._message_supports_streaming_attachment(rnd) is True
+    assert _message_supports_streaming_attachment(rnd) is True
 
 
 def test_message_supports_streaming_accepts_message_media_voice():
     msg = _message_voice()
-    assert mf._message_supports_streaming_attachment(msg) is True
+    assert _message_supports_streaming_attachment(msg) is True
 
 
 def test_message_supports_streaming_no_media():
     m = MagicMock()
     m.media = None
-    assert mf._message_supports_streaming_attachment(m) is False
+    assert _message_supports_streaming_attachment(m) is False
 
 
 @pytest.mark.asyncio
@@ -96,7 +100,7 @@ async def test_maybe_no_url_when_stdio(stdio_config):
     set_config(stdio_config)
     media: dict = {"filename": "a.txt", "mime_type": "text/plain"}
     with patch(f"{_ATTACH}.mint_attachment_ticket", new_callable=AsyncMock) as mint_m:
-        await mf._maybe_set_attachment_download_url(
+        await _maybe_set_attachment_download_url(
             media, _message_with_document([]), -100
         )
     assert "attachment_download_url" not in media
@@ -109,7 +113,7 @@ async def test_maybe_no_url_when_placeholder_domain(http_no_auth_config):
     set_config(http_no_auth_config)
     media: dict = {"filename": "a.txt", "mime_type": "text/plain"}
     with patch(f"{_ATTACH}.mint_attachment_ticket", new_callable=AsyncMock) as mint_m:
-        await mf._maybe_set_attachment_download_url(
+        await _maybe_set_attachment_download_url(
             media, _message_with_document([]), -100
         )
     assert "attachment_download_url" not in media
@@ -122,7 +126,7 @@ async def test_maybe_no_url_when_chat_id_none(http_no_auth_config):
     set_config(http_no_auth_config)
     media: dict = {"filename": "a.txt", "mime_type": "text/plain"}
     with patch(f"{_ATTACH}.mint_attachment_ticket", new_callable=AsyncMock) as mint_m:
-        await mf._maybe_set_attachment_download_url(
+        await _maybe_set_attachment_download_url(
             media, _message_with_document([]), None
         )
     assert "attachment_download_url" not in media
@@ -137,7 +141,7 @@ async def test_maybe_no_url_when_chat_id_empty_or_whitespace(http_no_auth_config
     with patch(f"{_ATTACH}.mint_attachment_ticket", new_callable=AsyncMock) as mint_m:
         for chat_id in ("", "   ", "\t"):
             media: dict = {"filename": "a.txt", "mime_type": "text/plain"}
-            await mf._maybe_set_attachment_download_url(media, msg, chat_id)
+            await _maybe_set_attachment_download_url(media, msg, chat_id)
             assert "attachment_download_url" not in media
     mint_m.assert_not_awaited()
 
@@ -149,7 +153,7 @@ async def test_maybe_no_url_when_chat_id_not_int_convertible(http_no_auth_config
     media: dict = {"filename": "a.txt", "mime_type": "text/plain"}
     msg = _message_with_document([])
     with patch(f"{_ATTACH}.mint_attachment_ticket", new_callable=AsyncMock) as mint_m:
-        await mf._maybe_set_attachment_download_url(media, msg, "not-a-chat-id")
+        await _maybe_set_attachment_download_url(media, msg, "not-a-chat-id")
     assert "attachment_download_url" not in media
     mint_m.assert_not_awaited()
 
@@ -165,7 +169,7 @@ async def test_maybe_sets_url_for_voice(http_no_auth_config):
     with patch(f"{_ATTACH}.mint_attachment_ticket", new_callable=AsyncMock) as mint_m:
         mint_m.return_value = FIXED_TICKET
         with patch(f"{_ATTACH}.get_request_token", return_value="req-token-xyz"):
-            await mf._maybe_set_attachment_download_url(media, msg, -50)
+            await _maybe_set_attachment_download_url(media, msg, -50)
 
     assert "attachment_download_url" in media
     mint_m.assert_awaited_once()
@@ -182,7 +186,7 @@ async def test_maybe_sets_url_for_round_video(http_no_auth_config):
     with patch(f"{_ATTACH}.mint_attachment_ticket", new_callable=AsyncMock) as mint_m:
         mint_m.return_value = FIXED_TICKET
         with patch(f"{_ATTACH}.get_request_token", return_value="req-token-xyz"):
-            await mf._maybe_set_attachment_download_url(media, msg, -51)
+            await _maybe_set_attachment_download_url(media, msg, -51)
 
     assert "attachment_download_url" in media
     mint_m.assert_awaited_once()
@@ -199,7 +203,7 @@ async def test_maybe_sets_url_and_mint_args_with_request_token(http_no_auth_conf
     with patch(f"{_ATTACH}.mint_attachment_ticket", new_callable=AsyncMock) as mint_m:
         mint_m.return_value = FIXED_TICKET
         with patch(f"{_ATTACH}.get_request_token", return_value="req-token-xyz"):
-            await mf._maybe_set_attachment_download_url(media, msg, -999)
+            await _maybe_set_attachment_download_url(media, msg, -999)
 
     assert (
         media["attachment_download_url"]
@@ -227,7 +231,7 @@ async def test_maybe_falls_back_to_session_name_when_no_request_token(
     with patch(f"{_ATTACH}.mint_attachment_ticket", new_callable=AsyncMock) as mint_m:
         mint_m.return_value = FIXED_TICKET
         with patch(f"{_ATTACH}.get_request_token", return_value=None):
-            await mf._maybe_set_attachment_download_url(media, msg, 321)
+            await _maybe_set_attachment_download_url(media, msg, 321)
 
     assert (
         media["attachment_download_url"]
@@ -240,6 +244,66 @@ async def test_maybe_falls_back_to_session_name_when_no_request_token(
         filename="p.jpg",
         mime_type="image/jpeg",
     )
+
+
+@pytest.mark.asyncio
+async def test_build_message_result_sets_attachment_download_url(http_no_auth_config):
+    """Regression: build_message_result must use attachments helper (not a shadowed copy)."""
+    from datetime import datetime
+    from types import SimpleNamespace
+
+    from src.utils.message_format import build_message_result
+
+    http_no_auth_config.domain = "files.example.test"
+    http_no_auth_config.session_name = "fallback-session"
+    set_config(http_no_auth_config)
+
+    msg = SimpleNamespace(
+        id=222,
+        text="photo caption",
+        message=None,
+        caption=None,
+        date=datetime.now(),
+        media=MessageMediaPhoto(),
+        reply_to_msg_id=None,
+        reply_to=None,
+        forward=None,
+        action=None,
+        reply_markup=None,
+        sender_id=None,
+    )
+    entity = SimpleNamespace(
+        id=-100,
+        title="Test Chat",
+        username="testchat",
+        first_name=None,
+        last_name=None,
+        forum=False,
+        access_hash=None,
+        min=None,
+    )
+
+    with (
+        patch(
+            "src.utils.message_format.core.get_sender_info",
+            new=AsyncMock(return_value={"id": 1, "name": "Sender"}),
+        ),
+        patch(
+            "src.utils.message_format.core._extract_forward_info",
+            new=AsyncMock(return_value=None),
+        ),
+        patch(f"{_ATTACH}.mint_attachment_ticket", new_callable=AsyncMock) as mint_m,
+        patch(f"{_ATTACH}.get_request_token", return_value="req-token-xyz"),
+    ):
+        mint_m.return_value = FIXED_TICKET
+        result = await build_message_result(msg, entity, link=None)
+
+    assert "media" in result
+    assert (
+        result["media"]["attachment_download_url"]
+        == f"https://files.example.test/v1/attachments/{FIXED_TICKET}/photo_222.jpg"
+    )
+    mint_m.assert_awaited_once()
 
 
 @pytest.mark.asyncio

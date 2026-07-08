@@ -24,7 +24,9 @@ async def test_flood_wait_raises_flood_wait(caplog):
     )
 
     with (
-        caplog.at_level(logging.WARNING, logger="src.tools.chat_discovery.contact_search"),
+        caplog.at_level(
+            logging.WARNING, logger="src.tools.chat_discovery.contact_search"
+        ),
         patch(
             "src.tools.chat_discovery.contact_search.get_connected_client",
             return_value=mock_client,
@@ -35,8 +37,7 @@ async def test_flood_wait_raises_flood_wait(caplog):
             pass
 
     assert any(
-        "FloodWait" in r.message and "42" in r.message
-        for r in caplog.records
+        "FloodWait" in r.message and "42" in r.message for r in caplog.records
     ), "FloodWait warning should be logged with seconds"
 
 
@@ -55,7 +56,9 @@ async def test_flood_wait_logs_hours(caplog):
     )
 
     with (
-        caplog.at_level(logging.WARNING, logger="src.tools.chat_discovery.contact_search"),
+        caplog.at_level(
+            logging.WARNING, logger="src.tools.chat_discovery.contact_search"
+        ),
         patch(
             "src.tools.chat_discovery.contact_search.get_connected_client",
             return_value=mock_client,
@@ -65,7 +68,6 @@ async def test_flood_wait_logs_hours(caplog):
         async for _ in search_contacts_native(query="test", limit=10):
             pass
 
-    assert any(
-        "1.0h" in r.message
-        for r in caplog.records
-    ), "Log should include hours for 3600s flood wait"
+    assert any("1.0h" in r.message for r in caplog.records), (
+        "Log should include hours for 3600s flood wait"
+    )

@@ -24,7 +24,6 @@ from src.utils.message_format import (
 )
 
 from . import results
-from .types import ThreadScope
 from .search_generators import _search_chat_messages_generator
 
 logger = logging.getLogger(__name__)

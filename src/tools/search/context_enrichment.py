@@ -245,7 +245,7 @@ async def _enrich_with_context(
                             _lightweight_from_result(r)
                             for r in replies[:_CONTEXT_REPLY_LIMIT]
                         ]
-                except (asyncio.TimeoutError, TimeoutError):
+                except TimeoutError:
                     timeout_count += 1
                     logger.debug("Reply fetch timeout for msg %d", mid)
                     return idx, []

@@ -161,9 +161,7 @@ class TestValidateFilePathsDataUri:
         override = cfg().model_copy(update={"server_mode": ServerMode.HTTP_AUTH})
         set_config(override)
         try:
-            file_list, error = _validate_file_paths(
-                [uri, url], "send_message", {}
-            )
+            file_list, error = _validate_file_paths([uri, url], "send_message", {})
         finally:
             reset_cfg_for_tests()
         assert error is None
@@ -222,9 +220,7 @@ class TestPrepareFilesForSendDataUri:
             new_callable=AsyncMock,
             return_value=[url_data],
         ) as dl:
-            out = await prepare_files_for_send(
-                [uri, "https://example.com/file.bin"]
-            )
+            out = await prepare_files_for_send([uri, "https://example.com/file.bin"])
         # Only the URL should be downloaded; data: URI should be decoded inline
         dl.assert_awaited_once_with(["https://example.com/file.bin"])
         assert len(out) == 2

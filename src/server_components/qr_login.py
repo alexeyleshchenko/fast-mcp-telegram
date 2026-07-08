@@ -35,7 +35,9 @@ class SessionState:
     resulting_client: Any = None  # Set when QR is scanned successfully
     password_hint: str = ""  # 2FA hint when account has two-step verification
     _poll_task: asyncio.Task[Any] | None = field(default=None, repr=False)
-    _qr_login_obj: Any = field(default=None, repr=False)  # Telethon QRLogin object, set by manager
+    _qr_login_obj: Any = field(
+        default=None, repr=False
+    )  # Telethon QRLogin object, set by manager
     _status: str = field(default="pending", repr=False)
 
     @property
@@ -106,15 +108,11 @@ class QrLoginManager:
         try:
             qr_login = await telethon_client.qr_login()
         except Exception as exc:
-            raise QrLoginError(
-                "Failed to create Telegram QR login session"
-            ) from exc
+            raise QrLoginError("Failed to create Telegram QR login session") from exc
 
         qr_url = str(getattr(qr_login, "url", "")).strip()
         if not qr_url:
-            raise QrLoginError(
-                "Telethon QR login did not return a valid QR URL"
-            )
+            raise QrLoginError("Telethon QR login did not return a valid QR URL")
 
         session_id = uuid.uuid4().hex[:16]
         state = SessionState(telethon_client, qr_url)
@@ -161,7 +159,9 @@ class QrLoginManager:
             with contextlib.suppress(asyncio.CancelledError):
                 exc = state._poll_task.exception()
                 if exc is not None:
-                    logger.warning("QR session %s background task failed: %s", session_id, exc)
+                    logger.warning(
+                        "QR session %s background task failed: %s", session_id, exc
+                    )
                     state.mark_expired()
         return state.status
 
@@ -191,7 +191,9 @@ class QrLoginManager:
                     logger.warning("on_complete callback failed: %s", exc)
 
         except TimeoutError:
-            logger.info("QR session %s expired (timeout=%ss)", session_id, self._timeout)
+            logger.info(
+                "QR session %s expired (timeout=%ss)", session_id, self._timeout
+            )
             state.mark_expired()
             with contextlib.suppress(Exception):
                 await state.telethon_client.disconnect()
@@ -269,7 +271,9 @@ class QrLoginManager:
 
         new_url = str(getattr(qr_login, "url", "")).strip()
         if not new_url:
-            logger.warning("QR session %s regenerate: invalid URL from Telethon", session_id)
+            logger.warning(
+                "QR session %s regenerate: invalid URL from Telethon", session_id
+            )
             return None
         state.qr_url = new_url
         state.telethon_client = telethon_client
@@ -296,7 +300,10 @@ class QrLoginManager:
             elif state.is_completed and now - state.created_at > self._timeout * 2:
                 # Completed sessions older than 2x timeout
                 expired_ids.append(sid)
-            elif state.status == "2fa_required" and now - state.created_at > self._timeout * 2:
+            elif (
+                state.status == "2fa_required"
+                and now - state.created_at > self._timeout * 2
+            ):
                 # 2FA-required sessions older than 2x timeout
                 expired_ids.append(sid)
             elif state.age > self._timeout * 2 and state.status == "pending":
@@ -308,7 +315,9 @@ class QrLoginManager:
             self._sessions.pop(sid, None)
 
         if expired_ids:
-            logger.debug("Cleanup removed %d expired/completed QR session(s)", len(expired_ids))
+            logger.debug(
+                "Cleanup removed %d expired/completed QR session(s)", len(expired_ids)
+            )
 
         return len(expired_ids)
 

@@ -89,10 +89,13 @@ class TestResolveAccountPrefix:
 
     @pytest.mark.asyncio
     async def test_propagates_session_not_authorized(self):
-        with patch(
-            "src.server_components.account_tool_prefix_middleware.get_connected_client",
-            side_effect=SessionNotAuthorizedError("not authorized"),
-        ), pytest.raises(SessionNotAuthorizedError):
+        with (
+            patch(
+                "src.server_components.account_tool_prefix_middleware.get_connected_client",
+                side_effect=SessionNotAuthorizedError("not authorized"),
+            ),
+            pytest.raises(SessionNotAuthorizedError),
+        ):
             await _resolve_account_prefix("tok123")
 
     @pytest.mark.asyncio
@@ -242,9 +245,9 @@ class TestAccountPrefixedToolsMiddleware:
                 new_callable=AsyncMock,
                 return_value="alice",
             ),
+            pytest.raises(ToolError, match="account prefix 'alice_'"),
         ):
-            with pytest.raises(ToolError, match="account prefix 'alice_'"):
-                await middleware.on_call_tool(ctx, call_next)
+            await middleware.on_call_tool(ctx, call_next)
 
         call_next.assert_not_called()
 
@@ -265,9 +268,9 @@ class TestAccountPrefixedToolsMiddleware:
                 new_callable=AsyncMock,
                 return_value="alice",
             ),
+            pytest.raises(ToolError, match="account prefix 'alice_'"),
         ):
-            with pytest.raises(ToolError, match="account prefix 'alice_'"):
-                await middleware.on_call_tool(ctx, call_next)
+            await middleware.on_call_tool(ctx, call_next)
 
         call_next.assert_not_called()
 

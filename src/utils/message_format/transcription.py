@@ -15,6 +15,7 @@ from src.client.connection import get_connected_client
 
 logger = logging.getLogger(__name__)
 
+
 class PremiumRequiredError(Exception):
     """Exception raised when transcription fails due to non-premium account."""
 

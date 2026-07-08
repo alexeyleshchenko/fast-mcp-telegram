@@ -97,7 +97,9 @@ def register_mtproto_api_routes(mcp_app) -> None:
                 ):
                     return JSONResponse(blocked_denial, status_code=403)
 
-            if acl_denial := check_mtproto_api_access(token, allow_dangerous=allow_dangerous):
+            if acl_denial := check_mtproto_api_access(
+                token, allow_dangerous=allow_dangerous
+            ):
                 return JSONResponse(acl_denial, status_code=403)
 
         # Deny dangerous methods unless explicitly allowed

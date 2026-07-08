@@ -117,7 +117,9 @@ def require_auth(func: Callable) -> Callable:
             except ToolError:
                 raise
             except Exception:
-                logger.debug("FastMCP get_access_token fallback unavailable", exc_info=True)
+                logger.debug(
+                    "FastMCP get_access_token fallback unavailable", exc_info=True
+                )
 
         if token is None:
             logger.info("Unauthenticated tool call — returning auth guidance")
@@ -229,9 +231,7 @@ def with_auth_context(func: Callable) -> Callable:
                 if access_token is not None:
                     validated = access_token.token
                     set_request_token(validated)
-                    logger.info(
-                        f"Bearer token from auth provider: {validated[:8]}..."
-                    )
+                    logger.info(f"Bearer token from auth provider: {validated[:8]}...")
                     return await func(*args, **kwargs)
             error_msg = (
                 "Missing Bearer token in Authorization header. HTTP requests require "

@@ -164,6 +164,7 @@ _failure_lock = asyncio.Lock()
 
 # --- S3 helpers ---
 
+
 def is_s3_enabled() -> bool:
     """Check if S3 session storage is enabled. Lazy-imports s3_session on first call."""
     global s3_session
@@ -171,6 +172,7 @@ def is_s3_enabled() -> bool:
         return False
     if s3_session is None:
         from .. import s3_session as _s3
+
         s3_session = _s3
     return True
 
@@ -451,7 +453,9 @@ async def _load_session_file_for_token(token: str) -> Path:
                 raise SessionNotAuthorizedError(token) from exc
             except Exception as e:
                 # S3 unavailable — fall back to local file if it exists
-                logger.warning(f"S3 download failed for {token[:8]}..., trying local fallback: {e}")
+                logger.warning(
+                    f"S3 download failed for {token[:8]}..., trying local fallback: {e}"
+                )
                 if not local_path.exists():
                     raise SessionNotAuthorizedError(token) from e
                 if not await s3_session.verify_session_integrity(local_path):
@@ -637,9 +641,9 @@ async def ensure_connection(client: TelegramClient, token: str) -> bool:
             # In S3 mode, skip — Telethon's mtime isn't meaningful for session persistence
             if not is_s3_enabled():
                 with contextlib.suppress(InvalidSessionTokenError, OSError):
-                    _resolve_session_path_for_token(token).with_suffix(".session").touch(
-                        exist_ok=True
-                    )
+                    _resolve_session_path_for_token(token).with_suffix(
+                        ".session"
+                    ).touch(exist_ok=True)
 
         return client.is_connected()
     except SessionNotAuthorizedError:

@@ -4,10 +4,7 @@ Covers all supported URL formats and boundary cases.
 The function is private but tested directly — it's a pure function with no side effects.
 """
 
-import pytest
-
 from src.utils.entity import parse_telegram_url
-
 
 # ── t.me URLs ──
 
@@ -164,10 +161,7 @@ def test_tg_user_id() -> None:
 
 def test_tg_join_invite() -> None:
     """tg://join?invite=abc123 → https://t.me/+abc123 for Telethon."""
-    assert (
-        parse_telegram_url("tg://join?invite=abc123DEF")
-        == "https://t.me/+abc123DEF"
-    )
+    assert parse_telegram_url("tg://join?invite=abc123DEF") == "https://t.me/+abc123DEF"
 
 
 def test_tg_openmessage() -> None:

@@ -62,7 +62,11 @@ fast-mcp-telegram/
 │   │   ├── helpers.py            # General utility functions
 │   │   ├── logging_utils.py      # Consolidated logging utilities
 │   │   ├── mcp_config.py         # MCP configuration utilities
-│   │   └── message_format.py     # Message formatting and media parsing
+│   │   └── message_format/       # Message formatting package
+│   │       ├── __init__.py       # Public re-exports
+│   │       ├── core.py           # Message result building and media placeholders
+│   │       ├── attachments.py    # Attachment download URL helpers
+│   │       └── transcription.py  # Premium voice transcription
 │   ├── cli_setup.py              # CLI setup with pydantic-settings
 │   └── server.py                 # Main server entry point
 ├── tests/                        # Test suite
@@ -195,10 +199,10 @@ fast-mcp-telegram/
   - Consolidated logging functions
   - Parameter sanitization and enhancement
   - Request tracking and correlation
-- **`src/utils/message_format.py`**: Message formatting, interactive media parsing (Todo lists, polls), and voice transcription
-  - Message content formatting
-  - Media placeholder generation
-  - Link generation and formatting
+- **`src/utils/message_format/`**: Message formatting package (interactive media, attachments, voice transcription)
+  - **`core.py`**: Message content formatting, media placeholders, Todo/poll parsing
+  - **`attachments.py`**: Attachment download URL helpers for tool output
+  - **`transcription.py`**: Premium voice transcription and cache
 - **`src/utils/mcp_config.py`**: MCP configuration utilities
   - MCP server configuration helpers
 

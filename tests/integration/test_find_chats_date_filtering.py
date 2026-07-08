@@ -3,6 +3,7 @@
 
 Run with: uv run python3 tests/integration/test_find_chats_date_filtering.py
 """
+
 import asyncio
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -31,14 +32,18 @@ async def run_find_chats_date_filtering_test():
         if not entity:
             continue
         eid = getattr(entity, "id", None)
-        title = getattr(entity, "title", None) or getattr(entity, "first_name", "Unknown")
+        title = getattr(entity, "title", None) or getattr(
+            entity, "first_name", "Unknown"
+        )
         dialog_date = getattr(dialog, "date", None)
         if eid and dialog_date:
-            dialogs_info.append({
-                "id": eid,
-                "title": title,
-                "date": dialog_date,
-            })
+            dialogs_info.append(
+                {
+                    "id": eid,
+                    "title": title,
+                    "date": dialog_date,
+                }
+            )
 
     if not dialogs_info:
         print("ERROR: No dialogs found")
@@ -48,8 +53,12 @@ async def run_find_chats_date_filtering_test():
     dialogs_info.sort(key=lambda x: x["date"], reverse=True)
 
     print(f"\nFound {len(dialogs_info)} dialogs with dates")
-    print(f"Most recent: {dialogs_info[0]['title']} ({dialogs_info[0]['date'].isoformat()})")
-    print(f"Oldest: {dialogs_info[-1]['title']} ({dialogs_info[-1]['date'].isoformat()})")
+    print(
+        f"Most recent: {dialogs_info[0]['title']} ({dialogs_info[0]['date'].isoformat()})"
+    )
+    print(
+        f"Oldest: {dialogs_info[-1]['title']} ({dialogs_info[-1]['date'].isoformat()})"
+    )
 
     # Test 1: Browse without date filter
     print("\n--- Test 1: find_chats without date filter ---")
@@ -61,7 +70,9 @@ async def run_find_chats_date_filtering_test():
         print(f"Found {len(chats)} chats")
         for c in chats[:5]:
             date = c.get("last_activity_date", "N/A")
-            print(f"  [{c.get('id')}] {c.get('title') or c.get('first_name', 'Unknown')} - {date}")
+            print(
+                f"  [{c.get('id')}] {c.get('title') or c.get('first_name', 'Unknown')} - {date}"
+            )
 
     # Test 2: find_chats with min_date (Moscow time today = 2026-04-23 UTC)
     print("\n--- Test 2: find_chats with min_date=2026-04-23 ---")
@@ -75,7 +86,9 @@ async def run_find_chats_date_filtering_test():
         print(f"Found {len(chats)} chats")
         for c in chats[:10]:
             date = c.get("last_activity_date", "N/A")
-            print(f"  [{c.get('id')}] {c.get('title') or c.get('first_name', 'Unknown')} - last_activity: {date}")
+            print(
+                f"  [{c.get('id')}] {c.get('title') or c.get('first_name', 'Unknown')} - last_activity: {date}"
+            )
 
     # Test 3: find_chats with max_date (old only)
     print("\n--- Test 3: find_chats with max_date ---")
@@ -90,14 +103,18 @@ async def run_find_chats_date_filtering_test():
         print(f"Found {len(chats)} chats")
         for c in chats[:5]:
             date = c.get("last_activity_date", "N/A")
-            print(f"  [{c.get('id')}] {c.get('title') or c.get('first_name', 'Unknown')} - last_activity: {date}")
+            print(
+                f"  [{c.get('id')}] {c.get('title') or c.get('first_name', 'Unknown')} - last_activity: {date}"
+            )
 
     # Test 4: find_chats with both min and max date
     print("\n--- Test 4: find_chats with date range ---")
     old_date = dialogs_info[-1]["date"].isoformat()[:10]
     recent_date = dialogs_info[0]["date"].isoformat()[:10]
     print(f"Using min_date={old_date}, max_date={recent_date}")
-    result = await find_chats_impl(query=None, limit=50, min_date=old_date, max_date=recent_date)
+    result = await find_chats_impl(
+        query=None, limit=50, min_date=old_date, max_date=recent_date
+    )
     if "error" in result:
         print(f"ERROR: {result['error']}")
     else:
@@ -109,7 +126,9 @@ async def run_find_chats_date_filtering_test():
         hour=0, minute=0, second=0, microsecond=0
     )
     min_date_msk = start_today_msk.isoformat()
-    print("\n--- Test 5: find_chats with folder='Без каналов' and min_date (Moscow) ---")
+    print(
+        "\n--- Test 5: find_chats with folder='Без каналов' and min_date (Moscow) ---"
+    )
     print(
         f"Using min_date={min_date_msk} (start of current calendar day, Europe/Moscow; "
         f"calendar date {start_today_msk.date()})"
@@ -125,7 +144,9 @@ async def run_find_chats_date_filtering_test():
         for c in chats[:10]:
             date = c.get("last_activity_date", "N/A")
             ctype = c.get("type", "unknown")
-            print(f"  [{c.get('id')}] {c.get('title') or c.get('first_name', 'Unknown')} ({ctype}) - last_activity: {date}")
+            print(
+                f"  [{c.get('id')}] {c.get('title') or c.get('first_name', 'Unknown')} ({ctype}) - last_activity: {date}"
+            )
 
     # Test 6: Invalid date format
     print("\n--- Test 6: Invalid min_date format (should error) ---")

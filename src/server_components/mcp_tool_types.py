@@ -222,7 +222,7 @@ ContextWindow = Annotated[
         le=10,
         description=(
             "Number of surrounding messages to include as context for each search result. "
-            "0 = disabled (default). 1–10 = include N messages before and N after each result. "
+            "0 = disabled (default). 1-10 = include N messages before and N after each result. "
             "Also fetches the message being replied to and top replies (if include_replies=true). "
             "Requires chat_id. Disabled when result count exceeds cost-based caps."
         ),

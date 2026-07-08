@@ -183,7 +183,7 @@ class TestJsonSafeDateTime:
         """``datetime`` becomes Unix timestamp int."""
         import datetime
 
-        dt = datetime.datetime(2026, 7, 1, 23, 1, 40, tzinfo=datetime.timezone.utc)
+        dt = datetime.datetime(2026, 7, 1, 23, 1, 40, tzinfo=datetime.UTC)
         result = _json_safe(dt)
         assert result == int(dt.timestamp())
         assert isinstance(result, int)
@@ -192,7 +192,7 @@ class TestJsonSafeDateTime:
         """Nested ``datetime`` inside a dict is converted to int."""
         import datetime
 
-        dt = datetime.datetime(2026, 7, 1, 23, 1, 40, tzinfo=datetime.timezone.utc)
+        dt = datetime.datetime(2026, 7, 1, 23, 1, 40, tzinfo=datetime.UTC)
         tl = {"_": "Updates", "date": dt, "seq": 0}
         result = _json_safe(tl)
         assert isinstance(result["date"], int)
@@ -202,7 +202,7 @@ class TestJsonSafeDateTime:
         """``datetime`` inside a nested TL ``to_dict()`` subtree."""
         import datetime
 
-        dt = datetime.datetime(2026, 7, 1, 23, 1, 40, tzinfo=datetime.timezone.utc)
+        dt = datetime.datetime(2026, 7, 1, 23, 1, 40, tzinfo=datetime.UTC)
         outer = {
             "_": "UpdateShortMessage",
             "date": dt,

@@ -59,24 +59,27 @@ def create_handler(
                     last = None
 
                 if last is not None:
-                    last_ts = last.timestamp() if hasattr(last, "timestamp") else float(last)
+                    last_ts = (
+                        last.timestamp() if hasattr(last, "timestamp") else float(last)
+                    )
                     seconds_ago = round(now - last_ts)
                     last_iso = (
-                        last.isoformat()
-                        if hasattr(last, "isoformat")
-                        else str(last)
+                        last.isoformat() if hasattr(last, "isoformat") else str(last)
                     )
                 else:
                     seconds_ago = None
                     last_iso = None
 
-                return self._json_response({
-                    "status": "ok",
-                    "service": "telemetry-collector",
-                    "last_heartbeat_at": last_iso,
-                    "seconds_since_last_heartbeat": seconds_ago,
-                })
+                return self._json_response(
+                    {
+                        "status": "ok",
+                        "service": "telemetry-collector",
+                        "last_heartbeat_at": last_iso,
+                        "seconds_since_last_heartbeat": seconds_ago,
+                    }
+                )
             self._json_response({"error": "not found"}, 404)
+            return None
 
         def do_POST(self) -> None:
             if self.path != "/v1/event":
@@ -107,7 +110,6 @@ def create_handler(
 
         def log_message(self, fmt: str, *args: object) -> None:
             """Quiet — container logs via stdout instead."""
-            pass
 
     return TelemetryHandler
 
@@ -123,7 +125,7 @@ def main() -> None:
     from app.database import PgStorage
     from app.settings import DSN
 
-    print(f"Connecting to database…", file=sys.stderr)
+    print("Connecting to database…", file=sys.stderr)
     storage = PgStorage(DSN)
     try:
         storage.connect()

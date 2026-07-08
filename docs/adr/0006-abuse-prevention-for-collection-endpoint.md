@@ -135,9 +135,15 @@ class TelemetryPayload:
         else:
             now = int(time.time())
             if self.ts > now + _FUTURE_DRIFT_SECONDS:
-                errors.append(f"ts {self.ts} is {self.ts - now}s in the future")
+                errors.append(
+                    f"ts {self.ts} is {self.ts - now}s in the future "
+                    f"(max {_FUTURE_DRIFT_SECONDS}s)"
+                )
             if self.ts < now - _OLD_WINDOW_SECONDS:
-                errors.append(f"ts {self.ts} is {now - self.ts}s old")
+                errors.append(
+                    f"ts {self.ts} is {now - self.ts}s old "
+                    f"(max {_OLD_WINDOW_SECONDS}s)"
+                )
 
         # --- started_at ---
         if not isinstance(self.started_at, int) or isinstance(self.started_at, bool):

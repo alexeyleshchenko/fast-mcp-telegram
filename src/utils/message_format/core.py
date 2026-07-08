@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Callable
 from typing import Any
 
@@ -14,7 +13,6 @@ from src.utils.entity import (
 
 from .attachments import _maybe_set_attachment_download_url
 
-logger = logging.getLogger(__name__)
 
 def _service_action_placeholder_text(message) -> str | None:
     """Short English label for Telegram service messages (Message.action set)."""
@@ -61,69 +59,6 @@ def _document_voice_and_round_note_flags(document) -> tuple[bool, bool]:
         elif ac == "DocumentAttributeVideo" and getattr(attr, "round_message", False):
             is_round_video = True
     return is_voice, is_round_video
-
-
-def _message_supports_streaming_attachment(message) -> bool:
-    """Whether attachment HTTP streaming is supported for this message (documents, photos, voice)."""
-    media = getattr(message, "media", None)
-    if not media:
-        return False
-    media_cls = media.__class__.__name__
-    if media_cls == "MessageMediaPhoto":
-        return True
-    if media_cls == "MessageMediaDocument":
-        return getattr(media, "document", None) is not None
-    return media_cls == "MessageMediaVoice"
-
-
-async def _maybe_set_attachment_download_url(
-    media_dict: dict[str, Any],
-    message,
-    chat_id: int | None,
-) -> None:
-    """Set media['attachment_download_url'] when HTTP mode and DOMAIN resolves to a public origin."""
-    if chat_id is None:
-        return
-    if isinstance(chat_id, str) and not chat_id.strip():
-        return
-    config = cfg()
-    if config.transport != "http" or not config.public_base_url_normalized:
-        return
-    if not _message_supports_streaming_attachment(message):
-        return
-
-    session_token = get_request_token()
-    if session_token is None:
-        session_token = config.session_name
-
-    filename = media_dict.get("filename")
-    mime_type = media_dict.get("mime_type")
-    try:
-        cid = int(chat_id)
-        mid = int(message.id)
-    except (TypeError, ValueError) as _conv_err:
-        logger.warning(
-            "Skipping attachment URL: invalid chat_id=%r or message.id=%r (%s)",
-            chat_id,
-            getattr(message, "id", None),
-            _conv_err,
-        )
-        return
-    tid = await mint_attachment_ticket(
-        session_token,
-        cid,
-        mid,
-        filename=filename if isinstance(filename, str) else None,
-        mime_type=mime_type if isinstance(mime_type, str) else None,
-    )
-    base = config.public_base_url_normalized
-    url = f"{base}/v1/attachments/{tid}"
-    if tid_filename := media_dict.get("filename"):
-        url = f"{url}/{quote(tid_filename, safe='')}"
-    else:
-        msg_id = getattr(message, "id", "unknown")
-        url = f"{url}/photo_{msg_id}.jpg"
-    media_dict["attachment_download_url"] = url
 
 
 def _has_any_media(message) -> bool:
@@ -569,4 +504,3 @@ async def build_message_result(
         result["reply_markup"] = reply_markup
 
     return result
-

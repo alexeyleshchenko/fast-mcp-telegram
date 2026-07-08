@@ -222,8 +222,13 @@ async def _scan_forum_topic_messages(
 
     while cap is None or len(raw_messages) < cap:
         messages = await _forum_topic_search(
-            client, entity, topic_id, offset_id, query,
-            min_date=min_date, max_date=max_date,
+            client,
+            entity,
+            topic_id,
+            offset_id,
+            query,
+            min_date=min_date,
+            max_date=max_date,
         )
         if not messages:
             break

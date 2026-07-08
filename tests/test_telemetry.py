@@ -204,6 +204,7 @@ def test_get_rss_kb_parses_vmrss_from_proc_status(telemetry_module, monkeypatch)
     def _fake_open(path, *args, **kwargs):
         if path == "/proc/self/status":
             from io import StringIO
+
             return StringIO("Name:\tpython\nVmRSS:\t12345 kB\n")
         return _real_open(path, *args, **kwargs)
 
@@ -283,5 +284,3 @@ def test_send_heartbeat_network_error_silent(telemetry_module):
         # Should not raise
         telemetry_module.send_heartbeat(payload)
     mock_urlopen.assert_called_once()
-
-

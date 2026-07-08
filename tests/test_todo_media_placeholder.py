@@ -8,7 +8,7 @@ from typing import ClassVar
 from pydantic_core import to_jsonable_python
 from telethon.tl.types import PeerUser
 
-from src.utils.message_format import (
+from src.utils.message_format.core import (
     _fill_todo_media_placeholder,
     _todo_completed_by_to_int,
 )

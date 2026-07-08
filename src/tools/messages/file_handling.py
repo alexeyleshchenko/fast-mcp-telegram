@@ -62,7 +62,7 @@ def _parse_data_uri(uri: str) -> tuple[str, bytes, str]:
         raise ValueError("Invalid data URI: missing comma separator")
 
     header = uri[5:comma_idx]  # e.g. "image/png;base64" or ";base64"
-    payload = uri[comma_idx + 1:]
+    payload = uri[comma_idx + 1 :]
 
     if not payload:
         raise ValueError("Invalid data URI: empty payload")
@@ -77,7 +77,7 @@ def _parse_data_uri(uri: str) -> tuple[str, bytes, str]:
         if part == "base64":
             is_base64 = True
         elif part.startswith("filename="):
-            filename = unquote(part[len("filename="):])
+            filename = unquote(part[len("filename=") :])
         elif part:
             mime_type = part
 
@@ -101,8 +101,7 @@ def _parse_data_uri(uri: str) -> tuple[str, bytes, str]:
     max_bytes = config.max_file_size_mb * 1024 * 1024
     if len(decoded) > max_bytes:
         raise ValueError(
-            f"Data URI payload too large: {len(decoded)} bytes "
-            f"(max: {max_bytes} bytes)"
+            f"Data URI payload too large: {len(decoded)} bytes (max: {max_bytes} bytes)"
         )
 
     # Derive filename: use explicit filename param if provided, else generate from MIME type
@@ -175,9 +174,7 @@ async def prepare_files_for_send(file_list: list[str]) -> list[BytesIO | str]:
     - http(s) URLs are downloaded with security validation
     - Local paths are kept as-is (stdio mode only, validated elsewhere)
     """
-    if not any(
-        f.startswith(("http://", "https://", "data:")) for f in file_list
-    ):
+    if not any(f.startswith(("http://", "https://", "data:")) for f in file_list):
         return file_list
 
     url_entries = [f for f in file_list if f.startswith(("http://", "https://"))]

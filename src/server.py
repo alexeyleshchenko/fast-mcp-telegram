@@ -104,6 +104,7 @@ async def _init_s3() -> None:
 async def _shutdown_s3() -> None:
     """Graceful S3 shutdown: close client after all evictions are done."""
     from src import s3_session
+
     try:
         await asyncio.wait_for(s3_session.close_s3_client(), timeout=5)
     except TimeoutError:

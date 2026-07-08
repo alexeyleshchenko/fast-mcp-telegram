@@ -303,8 +303,9 @@ class TestConvertPeerTypes:
     async def test_input_peer_chat_to_int(self):
         """``InputPeerChat`` → raw ``chat_id`` for method expecting ``int``."""
         from unittest.mock import MagicMock
-        from telethon.tl.types import InputPeerChat, InputPeerUser
+
         from telethon.tl.functions.messages import AddChatUserRequest
+        from telethon.tl.types import InputPeerChat, InputPeerUser
 
         mock_entity = MagicMock()
         mock_entity.id = 8957744751
@@ -379,8 +380,6 @@ class TestInvokeMtprotoWithTlDict:
     @pytest.mark.asyncio
     async def test_tl_dict_with_resolve_false(self):
         """TL dict with resolve=False → constructs TL object, invokes successfully."""
-        from telethon.tl.functions.messages import AddChatUserRequest
-        from telethon.tl.types import InputUser
 
         mock_client = AsyncMock()
         mock_client.return_value = {"_": "InvitedUsers", "users": [{"id": 1}]}

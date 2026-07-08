@@ -3,6 +3,7 @@
 
 Run with: uv run python3 tests/integration/test_filter_resolution.py
 """
+
 import asyncio
 
 from src.client.connection import get_connected_client
@@ -35,7 +36,7 @@ async def get_filter_info(client, filter_name: str) -> dict:
             "exclude_muted": filter_dict.get("exclude_muted", False),
             "exclude_read": filter_dict.get("exclude_read", False),
             "exclude_archived": filter_dict.get("exclude_archived", False),
-        }
+        },
     }
 
 
@@ -53,7 +54,9 @@ async def resolve_include_peers(client, filter_dict: dict) -> list[dict]:
     return results
 
 
-async def count_matching_dialogs(client, filter_dict: dict, limit: int = 500) -> tuple[int, list[tuple[dict, object]]]:
+async def count_matching_dialogs(
+    client, filter_dict: dict, limit: int = 500
+) -> tuple[int, list[tuple[dict, object]]]:
     """Count dialogs matching filter flags and return first N results with dialogs for verification."""
     matched = []
     async for dialog in client.iter_dialogs(limit=limit):
@@ -74,9 +77,9 @@ async def main():
     filters_to_test = ["Без каналов", "Ответить", "Каналы"]
 
     for name in filters_to_test:
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"Testing filter: {name}")
-        print('='*60)
+        print("=" * 60)
 
         filter_info = await get_filter_info(client, name)
         if "error" in filter_info:
@@ -101,7 +104,9 @@ async def main():
                 type_counts[t] = type_counts.get(t, 0) + 1
             print(f"  Resolved types: {type_counts}")
             for i, p in enumerate(peers[:5]):
-                print(f"    {i+1}. {p.get('type')}: {p.get('title') or p.get('first_name', 'N/A')} (id={p.get('id')})")
+                print(
+                    f"    {i + 1}. {p.get('type')}: {p.get('title') or p.get('first_name', 'N/A')} (id={p.get('id')})"
+                )
 
         # Test flag matching
         print("\nFlag matching (checking first 500 dialogs)...")
@@ -109,8 +114,10 @@ async def main():
         print(f"  Total matching: {count}")
         if sample:
             print("  Sample (first 5):")
-            for i, (e, dialog) in enumerate(sample[:5]):
-                print(f"    {i+1}. {e.get('type')}: {e.get('title') or e.get('first_name', 'N/A')} (id={e.get('id')})")
+            for i, (e, _dialog) in enumerate(sample[:5]):
+                print(
+                    f"    {i + 1}. {e.get('type')}: {e.get('title') or e.get('first_name', 'N/A')} (id={e.get('id')})"
+                )
 
         # Verify each sample complies with filter flags (but not include_peers/exclude_peers)
         print(f"\n  Verifying {len(sample)} sample chats comply with filter flags...")
@@ -121,11 +128,17 @@ async def main():
                 flag_failures.append(entity_dict)
 
         if flag_failures:
-            print(f"  FLAGS VERIFICATION FAILED: {len(flag_failures)} chats do not comply with filter flags:")
+            print(
+                f"  FLAGS VERIFICATION FAILED: {len(flag_failures)} chats do not comply with filter flags:"
+            )
             for e in flag_failures:
-                print(f"    - {e.get('type')}: {e.get('title') or e.get('first_name', 'N/A')} (id={e.get('id')})")
+                print(
+                    f"    - {e.get('type')}: {e.get('title') or e.get('first_name', 'N/A')} (id={e.get('id')})"
+                )
         else:
-            print(f"  Flags verification passed: all {len(sample)} sample chats comply with filter flags.")
+            print(
+                f"  Flags verification passed: all {len(sample)} sample chats comply with filter flags."
+            )
 
         # Verify exclude_peers compliance
         exclude_peers = filter_dict.get("exclude_peers", []) or []
@@ -140,15 +153,21 @@ async def main():
 
             peer_failures = [e for e, _ in sample if e.get("id") in exclude_ids]
             if peer_failures:
-                print(f"  EXCLUDE_PEERS VERIFICATION FAILED: {len(peer_failures)} chats are in exclude_peers:")
+                print(
+                    f"  EXCLUDE_PEERS VERIFICATION FAILED: {len(peer_failures)} chats are in exclude_peers:"
+                )
                 for e in peer_failures:
-                    print(f"    - {e.get('type')}: {e.get('title') or e.get('first_name', 'N/A')} (id={e.get('id')})")
+                    print(
+                        f"    - {e.get('type')}: {e.get('title') or e.get('first_name', 'N/A')} (id={e.get('id')})"
+                    )
             else:
-                print("  Exclude peers verification passed: no sample chats are in exclude_peers.")
+                print(
+                    "  Exclude peers verification passed: no sample chats are in exclude_peers."
+                )
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("All filter tests completed")
-    print('='*60)
+    print("=" * 60)
 
 
 if __name__ == "__main__":

@@ -12,7 +12,7 @@ from src.tools.messages import (
     edit_message_impl,
     send_message_impl,
 )
-from src.utils.message_format import extract_topic_metadata, build_message_result
+from src.utils.message_format import build_message_result, extract_topic_metadata
 from tests.conftest import make_forum_channel, make_topic_message
 
 
@@ -154,7 +154,8 @@ async def test_get_chat_info_returns_topics_for_forum_chat():
 
     with (
         patch(
-            "src.tools.chat_discovery.chat_info.get_entity_by_id", new=AsyncMock(return_value=entity)
+            "src.tools.chat_discovery.chat_info.get_entity_by_id",
+            new=AsyncMock(return_value=entity),
         ),
         patch(
             "src.tools.chat_discovery.chat_info.build_entity_dict_enriched",
@@ -190,7 +191,8 @@ async def test_get_chat_info_skips_topics_for_non_forum_chat():
 
     with (
         patch(
-            "src.tools.chat_discovery.chat_info.get_entity_by_id", new=AsyncMock(return_value=entity)
+            "src.tools.chat_discovery.chat_info.get_entity_by_id",
+            new=AsyncMock(return_value=entity),
         ),
         patch(
             "src.tools.chat_discovery.chat_info.build_entity_dict_enriched",
@@ -459,7 +461,8 @@ async def test_list_forum_topics_exactly_limit_has_more_false_and_requests_plus_
     client = AsyncMock(return_value=SimpleNamespace(topics=topics))
 
     with patch(
-        "src.tools.chat_discovery.chat_info.get_connected_client", new=AsyncMock(return_value=client)
+        "src.tools.chat_discovery.chat_info.get_connected_client",
+        new=AsyncMock(return_value=client),
     ):
         result = await _list_forum_topics(entity, limit=20)
 
@@ -476,7 +479,8 @@ async def test_list_forum_topics_limit_plus_one_has_more_true_and_trims_output()
     client = AsyncMock(return_value=SimpleNamespace(topics=topics))
 
     with patch(
-        "src.tools.chat_discovery.chat_info.get_connected_client", new=AsyncMock(return_value=client)
+        "src.tools.chat_discovery.chat_info.get_connected_client",
+        new=AsyncMock(return_value=client),
     ):
         result = await _list_forum_topics(entity, limit=20)
 
@@ -499,7 +503,8 @@ async def test_list_forum_topics_limit_100_probes_next_page_and_sets_has_more_tr
     )
 
     with patch(
-        "src.tools.chat_discovery.chat_info.get_connected_client", new=AsyncMock(return_value=client)
+        "src.tools.chat_discovery.chat_info.get_connected_client",
+        new=AsyncMock(return_value=client),
     ):
         result = await _list_forum_topics(entity, limit=100)
 
@@ -527,7 +532,8 @@ async def test_list_forum_topics_limit_100_probes_next_page_and_sets_has_more_fa
     )
 
     with patch(
-        "src.tools.chat_discovery.chat_info.get_connected_client", new=AsyncMock(return_value=client)
+        "src.tools.chat_discovery.chat_info.get_connected_client",
+        new=AsyncMock(return_value=client),
     ):
         result = await _list_forum_topics(entity, limit=100)
 
@@ -543,7 +549,8 @@ async def test_list_forum_topics_handles_invalid_limit_with_default():
     client = AsyncMock(return_value=SimpleNamespace(topics=topics))
 
     with patch(
-        "src.tools.chat_discovery.chat_info.get_connected_client", new=AsyncMock(return_value=client)
+        "src.tools.chat_discovery.chat_info.get_connected_client",
+        new=AsyncMock(return_value=client),
     ):
         result = await _list_forum_topics(entity, limit="not-a-number")
 
@@ -560,7 +567,8 @@ async def test_list_forum_topics_limit_is_clamped_to_one_and_hundred():
     client = AsyncMock(return_value=SimpleNamespace(topics=[]))
 
     with patch(
-        "src.tools.chat_discovery.chat_info.get_connected_client", new=AsyncMock(return_value=client)
+        "src.tools.chat_discovery.chat_info.get_connected_client",
+        new=AsyncMock(return_value=client),
     ):
         await _list_forum_topics(entity, limit=0)
     req_low = client.await_args.args[0]
@@ -569,7 +577,8 @@ async def test_list_forum_topics_limit_is_clamped_to_one_and_hundred():
     client.reset_mock(return_value=True)
     client.return_value = SimpleNamespace(topics=[])
     with patch(
-        "src.tools.chat_discovery.chat_info.get_connected_client", new=AsyncMock(return_value=client)
+        "src.tools.chat_discovery.chat_info.get_connected_client",
+        new=AsyncMock(return_value=client),
     ):
         await _list_forum_topics(entity, limit=10_000)
     req_high = client.await_args.args[0]
@@ -588,7 +597,8 @@ async def test_list_forum_topics_filters_items_missing_id_or_title():
     client = AsyncMock(return_value=SimpleNamespace(topics=raw_topics))
 
     with patch(
-        "src.tools.chat_discovery.chat_info.get_connected_client", new=AsyncMock(return_value=client)
+        "src.tools.chat_discovery.chat_info.get_connected_client",
+        new=AsyncMock(return_value=client),
     ):
         result = await _list_forum_topics(entity, limit=20)
 
@@ -940,7 +950,8 @@ async def test_list_forum_topics_limit_100_underfilled_page_skips_probe_and_has_
     client = AsyncMock(return_value=SimpleNamespace(topics=topics))
 
     with patch(
-        "src.tools.chat_discovery.chat_info.get_connected_client", new=AsyncMock(return_value=client)
+        "src.tools.chat_discovery.chat_info.get_connected_client",
+        new=AsyncMock(return_value=client),
     ):
         result = await _list_forum_topics(entity, limit=100)
 
@@ -958,7 +969,8 @@ async def test_list_forum_topics_limit_100_missing_last_topic_id_disables_probe(
     client = AsyncMock(return_value=SimpleNamespace(topics=topics))
 
     with patch(
-        "src.tools.chat_discovery.chat_info.get_connected_client", new=AsyncMock(return_value=client)
+        "src.tools.chat_discovery.chat_info.get_connected_client",
+        new=AsyncMock(return_value=client),
     ):
         result = await _list_forum_topics(entity, limit=100)
 

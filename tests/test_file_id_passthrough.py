@@ -17,12 +17,22 @@ class TestIsOwnAttachmentUrl:
     def test_true_when_url_matches_public_base(self, http_no_auth_config):
         http_no_auth_config.domain = "files.example.test"
         set_config(http_no_auth_config)
-        assert is_own_attachment_url("https://files.example.test/v1/attachments/abc/def.jpg") is True
+        assert (
+            is_own_attachment_url(
+                "https://files.example.test/v1/attachments/abc/def.jpg"
+            )
+            is True
+        )
 
     def test_true_for_nested_path(self, http_no_auth_config):
         http_no_auth_config.domain = "files.example.test"
         set_config(http_no_auth_config)
-        assert is_own_attachment_url("https://files.example.test/v1/attachments/uuid/photo_123.jpg") is True
+        assert (
+            is_own_attachment_url(
+                "https://files.example.test/v1/attachments/uuid/photo_123.jpg"
+            )
+            is True
+        )
 
     def test_false_for_external_url(self, http_no_auth_config):
         http_no_auth_config.domain = "files.example.test"
@@ -40,7 +50,10 @@ class TestIsOwnAttachmentUrl:
         config.server_mode = ServerMode.HTTP_NO_AUTH
         config.domain = ""
         set_config(config)
-        assert is_own_attachment_url("https://files.example.test/v1/attachments/abc") is False
+        assert (
+            is_own_attachment_url("https://files.example.test/v1/attachments/abc")
+            is False
+        )
 
 
 class TestSendMessageFileIdPassthrough:
@@ -54,7 +67,9 @@ class TestSendMessageFileIdPassthrough:
         return client
 
     @pytest.mark.asyncio
-    async def test_own_attachment_url_uses_msg_media(self, http_no_auth_config, mock_client):
+    async def test_own_attachment_url_uses_msg_media(
+        self, http_no_auth_config, mock_client
+    ):
         """When files=[own_url], send_file is called with msg.media, not bytes."""
         http_no_auth_config.domain = "files.example.test"
         set_config(http_no_auth_config)
@@ -72,11 +87,13 @@ class TestSendMessageFileIdPassthrough:
             mint.return_value = MagicMock(
                 session_token="tok", chat_id=-100, message_id=999
             )
-            result_error, result_msg = await _send_message_or_files(
+            _result_error, _result_msg = await _send_message_or_files(
                 client=mock_client,
                 entity="me",
                 message="test caption",
-                files=["https://files.example.test/v1/attachments/ticket-uuid/photo_999.jpg"],
+                files=[
+                    "https://files.example.test/v1/attachments/ticket-uuid/photo_999.jpg"
+                ],
                 reply_to_msg_id=None,
                 parse_mode=None,
                 operation="send_message",
@@ -89,7 +106,9 @@ class TestSendMessageFileIdPassthrough:
         assert call_kwargs["caption"] == "test caption"
 
     @pytest.mark.asyncio
-    async def test_own_attachment_url_with_document_name(self, http_no_auth_config, mock_client):
+    async def test_own_attachment_url_with_document_name(
+        self, http_no_auth_config, mock_client
+    ):
         """Own URL with document filename also uses msg.media."""
         http_no_auth_config.domain = "files.example.test"
         set_config(http_no_auth_config)
@@ -102,12 +121,16 @@ class TestSendMessageFileIdPassthrough:
         mock_client.get_messages.return_value = mock_msg
 
         with patch("src.tools.messages.sending.get_attachment_ticket") as mint:
-            mint.return_value = MagicMock(session_token="tok", chat_id=-100, message_id=777)
-            result_error, result_msg = await _send_message_or_files(
+            mint.return_value = MagicMock(
+                session_token="tok", chat_id=-100, message_id=777
+            )
+            _result_error, _result_msg = await _send_message_or_files(
                 client=mock_client,
                 entity="me",
                 message="sending doc",
-                files=["https://files.example.test/v1/attachments/ticket-uuid/report.pdf"],
+                files=[
+                    "https://files.example.test/v1/attachments/ticket-uuid/report.pdf"
+                ],
                 reply_to_msg_id=None,
                 parse_mode=None,
                 operation="send_message",
@@ -118,7 +141,9 @@ class TestSendMessageFileIdPassthrough:
         assert mock_client.send_file.call_args.kwargs["file"] is mock_msg.media
 
     @pytest.mark.asyncio
-    async def test_unknown_ticket_falls_through_to_download(self, http_no_auth_config, mock_client):
+    async def test_unknown_ticket_falls_through_to_download(
+        self, http_no_auth_config, mock_client
+    ):
         """URL with unknown ticket ID falls through to normal download path."""
         http_no_auth_config.domain = "files.example.test"
         set_config(http_no_auth_config)
@@ -126,16 +151,22 @@ class TestSendMessageFileIdPassthrough:
         from src.tools.messages.sending import _send_message_or_files
 
         with patch("src.tools.messages.security.socket.getaddrinfo") as mock_dns:
-            mock_dns.return_value = [(socket.AF_INET, socket.SOCK_STREAM, 0, "", ("1.1.1.1", 0))]
+            mock_dns.return_value = [
+                (socket.AF_INET, socket.SOCK_STREAM, 0, "", ("1.1.1.1", 0))
+            ]
             with patch("src.tools.messages.sending.get_attachment_ticket") as mint:
                 mint.return_value = None  # ticket not found
-                with patch("src.tools.messages.sending._send_files_to_entity") as send_files:
+                with patch(
+                    "src.tools.messages.sending._send_files_to_entity"
+                ) as send_files:
                     send_files.return_value = MagicMock()
                     await _send_message_or_files(
                         client=mock_client,
                         entity="me",
                         message="test",
-                        files=["https://files.example.test/v1/attachments/bad-ticket/doc.pdf"],
+                        files=[
+                            "https://files.example.test/v1/attachments/bad-ticket/doc.pdf"
+                        ],
                         reply_to_msg_id=None,
                         parse_mode=None,
                         operation="send_message",
@@ -144,7 +175,9 @@ class TestSendMessageFileIdPassthrough:
                     send_files.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_external_url_skips_passthrough(self, http_no_auth_config, mock_client):
+    async def test_external_url_skips_passthrough(
+        self, http_no_auth_config, mock_client
+    ):
         """External URLs bypass the file_id passthrough entirely."""
         http_no_auth_config.domain = "files.example.test"
         set_config(http_no_auth_config)
@@ -152,10 +185,14 @@ class TestSendMessageFileIdPassthrough:
         from src.tools.messages.sending import _send_message_or_files
 
         with patch("src.tools.messages.security.socket.getaddrinfo") as mock_dns:
-            mock_dns.return_value = [(socket.AF_INET, socket.SOCK_STREAM, 0, "", ("1.1.1.1", 0))]
+            mock_dns.return_value = [
+                (socket.AF_INET, socket.SOCK_STREAM, 0, "", ("1.1.1.1", 0))
+            ]
             with patch("src.tools.messages.sending.get_attachment_ticket") as mint:
                 mint.return_value = None
-                with patch("src.tools.messages.sending._send_files_to_entity") as send_files:
+                with patch(
+                    "src.tools.messages.sending._send_files_to_entity"
+                ) as send_files:
                     send_files.return_value = MagicMock()
                     await _send_message_or_files(
                         client=mock_client,
@@ -210,7 +247,7 @@ class TestSendMessageFileIdPassthrough:
             mint.side_effect = lambda tid: MagicMock(
                 session_token="tok", chat_id=-100, message_id=int(tid.split("-")[1])
             )
-            result_error, result_msg = await _send_message_or_files(
+            _result_error, _result_msg = await _send_message_or_files(
                 client=mock_client,
                 entity="me",
                 message="caption for album",
@@ -252,12 +289,16 @@ class TestSendMessageFileIdPassthrough:
         mock_client.get_messages.return_value = mock_msg
 
         with patch("src.tools.messages.sending.get_attachment_ticket") as mint:
-            mint.return_value = MagicMock(session_token="tok", chat_id=-100, message_id=555)
-            result_error, result_msg = await _send_message_or_files(
+            mint.return_value = MagicMock(
+                session_token="tok", chat_id=-100, message_id=555
+            )
+            _result_error, _result_msg = await _send_message_or_files(
                 client=mock_client,
                 entity="me",
                 message="single file",
-                files=["https://files.example.test/v1/attachments/ticket-555/photo_555.jpg"],
+                files=[
+                    "https://files.example.test/v1/attachments/ticket-555/photo_555.jpg"
+                ],
                 reply_to_msg_id=None,
                 parse_mode=None,
                 operation="send_message",
@@ -285,8 +326,12 @@ class TestSendMessageFileIdPassthrough:
         mock_client.get_messages.return_value = mock_msg
 
         with patch("src.tools.messages.sending.get_attachment_ticket") as mint:
-            mint.return_value = MagicMock(session_token="tok", chat_id=-100, message_id=888)
-            with patch("src.tools.messages.sending._send_files_to_entity") as send_files:
+            mint.return_value = MagicMock(
+                session_token="tok", chat_id=-100, message_id=888
+            )
+            with patch(
+                "src.tools.messages.sending._send_files_to_entity"
+            ) as send_files:
                 send_files.return_value = MagicMock()
                 await _send_message_or_files(
                     client=mock_client,
@@ -305,7 +350,6 @@ class TestSendMessageFileIdPassthrough:
                 # the external URL is NOT sent separately when own URLs are present
                 send_files.assert_not_called()
                 mock_client.send_file.assert_called_once()
-
 
     @pytest.mark.asyncio
     async def test_multiple_own_urls_with_force_document(
@@ -367,7 +411,9 @@ class TestPhotoSyntheticFilename:
         http_no_auth_config.domain = "files.example.test"
         set_config(http_no_auth_config)
 
-        from src.utils import message_format as mf
+        from src.utils.message_format.attachments import (
+            _maybe_set_attachment_download_url,
+        )
 
         # Use a real-ish mock that _message_supports_streaming_attachment accepts
         msg = MagicMock()
@@ -386,7 +432,7 @@ class TestPhotoSyntheticFilename:
                 "src.utils.message_format.attachments.get_request_token",
                 return_value="tok",
             ):
-                await mf._maybe_set_attachment_download_url(media, msg, -100)
+                await _maybe_set_attachment_download_url(media, msg, -100)
 
         assert "/photo_12345.jpg" in media["attachment_download_url"]
         assert "test-ticket-uuid" in media["attachment_download_url"]

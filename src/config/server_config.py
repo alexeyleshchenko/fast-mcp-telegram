@@ -287,9 +287,7 @@ class ServerConfig(BaseSettings):
                 "S3 mode requires bearer token authentication."
             )
         if self.s3_session_storage and not self.s3_bucket:
-            raise ValueError(
-                "AWS_S3_BUCKET is required when S3_SESSION_STORAGE=true"
-            )
+            raise ValueError("AWS_S3_BUCKET is required when S3_SESSION_STORAGE=true")
 
     # Backward compatibility: DISABLE_AUTH environment variable
     disable_auth_env: str | None = Field(

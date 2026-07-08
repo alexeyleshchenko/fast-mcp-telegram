@@ -20,7 +20,9 @@ class TestValidateSessionToken:
         assert validate_session_token(token) == token
 
     def test_accepts_fixture_token(self):
-        assert validate_session_token(VALID_TEST_BEARER_TOKEN) == VALID_TEST_BEARER_TOKEN
+        assert (
+            validate_session_token(VALID_TEST_BEARER_TOKEN) == VALID_TEST_BEARER_TOKEN
+        )
 
     @pytest.mark.parametrize(
         "token",

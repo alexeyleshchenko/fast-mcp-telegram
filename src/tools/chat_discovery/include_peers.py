@@ -51,8 +51,10 @@ async def _find_chats_by_include_peers(
     exclude_peers = filter_dict.get("exclude_peers", []) or []
     logger.info(
         "include_peers start | limit=%d date=%s include_n=%d exclude_n=%d",
-        limit, "yes" if min_date or max_date else "no",
-        len(include_peers), len(exclude_peers),
+        limit,
+        "yes" if min_date or max_date else "no",
+        len(include_peers),
+        len(exclude_peers),
     )
 
     ordered_peer_ids: list[int] = []
@@ -71,12 +73,16 @@ async def _find_chats_by_include_peers(
                 if elapsed > 5.0:
                     logger.info(
                         "get_entity SLOW: peer=%s id=%s elapsed=%.3fs",
-                        peer_label, eid, elapsed,
+                        peer_label,
+                        eid,
+                        elapsed,
                     )
                 elif logger.isEnabledFor(logging.DEBUG):
                     logger.debug(
                         "get_entity: peer=%s id=%s elapsed=%.3fs",
-                        peer_label, eid, elapsed,
+                        peer_label,
+                        eid,
+                        elapsed,
                     )
                 if eid is None:
                     return None, None
@@ -86,7 +92,9 @@ async def _find_chats_by_include_peers(
                 elapsed = time.monotonic() - t_start
                 logger.warning(
                     "get_entity FAIL: peer=%s elapsed=%.3fs error=%s",
-                    repr(inp_peer), elapsed, e,
+                    repr(inp_peer),
+                    elapsed,
+                    e,
                 )
                 return None, None
 
@@ -222,9 +230,7 @@ async def _find_chats_by_include_peers(
                 from telethon.tl.types import InputPeerChannel
 
                 input_peers.append(
-                    InputPeerChannel(
-                        channel_id=pid, access_hash=access_hash
-                    )
+                    InputPeerChannel(channel_id=pid, access_hash=access_hash)
                 )
             elif ent_type == "group":
                 from telethon.tl.types import InputPeerChat
@@ -238,11 +244,7 @@ async def _find_chats_by_include_peers(
                     continue
                 from telethon.tl.types import InputPeerUser
 
-                input_peers.append(
-                    InputPeerUser(
-                        user_id=pid, access_hash=access_hash
-                    )
-                )
+                input_peers.append(InputPeerUser(user_id=pid, access_hash=access_hash))
 
         if not input_peers:
             continue
@@ -276,21 +278,22 @@ async def _find_chats_by_include_peers(
             t_chunk_end = time.monotonic()
             elapsed = t_chunk_end - t_chunk
             if elapsed > 1.0:
-                ent_summary = ",".join(
-                    f"{pid}:{t or '?'}" for pid, t in chunk_entities
-                )
+                ent_summary = ",".join(f"{pid}:{t or '?'}" for pid, t in chunk_entities)
                 logger.info(
                     "include_peers chunk %d/%d | peers=%d elapsed=%.3fs SLOW peer_ids=%s",
                     chunk_idx,
-                    (len(ordered_peer_ids) + GET_PEER_DIALOGS_CHUNK_SIZE - 1) // GET_PEER_DIALOGS_CHUNK_SIZE,
+                    (len(ordered_peer_ids) + GET_PEER_DIALOGS_CHUNK_SIZE - 1)
+                    // GET_PEER_DIALOGS_CHUNK_SIZE,
                     len(input_peers),
-                    elapsed, ent_summary,
+                    elapsed,
+                    ent_summary,
                 )
             else:
                 logger.info(
                     "include_peers chunk %d/%d | peers=%d elapsed=%.3fs",
                     chunk_idx,
-                    (len(ordered_peer_ids) + GET_PEER_DIALOGS_CHUNK_SIZE - 1) // GET_PEER_DIALOGS_CHUNK_SIZE,
+                    (len(ordered_peer_ids) + GET_PEER_DIALOGS_CHUNK_SIZE - 1)
+                    // GET_PEER_DIALOGS_CHUNK_SIZE,
                     len(input_peers),
                     elapsed,
                 )
@@ -301,8 +304,10 @@ async def _find_chats_by_include_peers(
     t_dialogs_end = time.monotonic()
     logger.info(
         "include_peers dialogs_batch | total_ids=%d got_activity=%d n_failed=%d elapsed=%.3fs",
-        len(ordered_peer_ids), len(last_activity_by_peer),
-        n_failed_dialogs, t_dialogs_end - t_dialogs_start,
+        len(ordered_peer_ids),
+        len(last_activity_by_peer),
+        n_failed_dialogs,
+        t_dialogs_end - t_dialogs_start,
     )
 
     min_date_dt = parse_iso_datetime_utc(min_date) if min_date else None
@@ -368,6 +373,8 @@ async def _find_chats_by_include_peers(
     total = time.monotonic() - t0
     logger.info(
         "include_peers done | results=%d fallback=%d total=%.3fs",
-        len(results), n_date_fallback, total,
+        len(results),
+        n_date_fallback,
+        total,
     )
     return {"chats": results}

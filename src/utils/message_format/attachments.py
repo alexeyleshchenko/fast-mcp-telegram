@@ -12,6 +12,7 @@ from src.server_components.attachment_tickets import mint_attachment_ticket
 
 logger = logging.getLogger(__name__)
 
+
 def _message_supports_streaming_attachment(message) -> bool:
     """Whether attachment HTTP streaming is supported for this message (documents, photos, voice)."""
     media = getattr(message, "media", None)
@@ -73,6 +74,7 @@ async def _maybe_set_attachment_download_url(
         msg_id = getattr(message, "id", "unknown")
         url = f"{url}/photo_{msg_id}.jpg"
     media_dict["attachment_download_url"] = url
+
 
 def response_attachment_warning(messages: list[dict]) -> str | None:
     """Return a warning string if DOMAIN is missing and any message has media.

@@ -46,16 +46,12 @@ def validate_ts(ts: Any, errors: list[str], *, field_name: str = "ts") -> None:
     now = int(time.time())
     if ts > now + FUTURE_DRIFT_SECONDS:
         errors.append(
-            f"{ts} is {ts - now}s in the future (max {FUTURE_DRIFT_SECONDS}s)"
-            if field_name == "ts"
-            else f"{field_name} {ts} is {ts - now}s in the future "
+            f"{field_name} {ts} is {ts - now}s in the future "
             f"(max {FUTURE_DRIFT_SECONDS}s)"
         )
     if ts < now - OLD_WINDOW_SECONDS:
         errors.append(
-            f"{ts} is {now - ts}s old (max {OLD_WINDOW_SECONDS}s)"
-            if field_name == "ts"
-            else f"{field_name} {ts} is {now - ts}s old (max {OLD_WINDOW_SECONDS}s)"
+            f"{field_name} {ts} is {now - ts}s old (max {OLD_WINDOW_SECONDS}s)"
         )
 
 

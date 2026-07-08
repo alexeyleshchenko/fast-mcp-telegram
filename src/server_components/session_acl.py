@@ -542,11 +542,14 @@ def _check_blocked_peer_pre(
         return check_blocked_peer_mtproto_params(merged)
 
     chat_id = kwargs.get("chat_id")
-    if chat_id is not None and operation in _CHAT_SCOPED_OPERATIONS:
-        if _is_blocked_peer(chat_id):
-            return _deny_blocked_peer(
-                operation, _normalize_chat_ref(chat_id), {"chat_id": chat_id}
-            )
+    if (
+        chat_id is not None
+        and operation in _CHAT_SCOPED_OPERATIONS
+        and _is_blocked_peer(chat_id)
+    ):
+        return _deny_blocked_peer(
+            operation, _normalize_chat_ref(chat_id), {"chat_id": chat_id}
+        )
     return None
 
 
@@ -665,9 +668,10 @@ def check_pre_tool_access(
     if not config.acl_enabled or config.disable_auth:
         return None
 
-    if blocked_peers_configured():
-        if blocked_denial := _check_blocked_peer_pre(operation_name, kwargs):
-            return blocked_denial
+    if blocked_peers_configured() and (
+        blocked_denial := _check_blocked_peer_pre(operation_name, kwargs)
+    ):
+        return blocked_denial
 
     rule = _rules_for_principal(get_request_token())
     if rule is None:
@@ -698,16 +702,21 @@ def check_pre_tool_access(
         )
 
     chat_id = kwargs.get("chat_id")
-    if chat_id is not None and operation_name in _WRITE_OPERATIONS | {
-        "get_messages",
-        "get_chat_info",
-    }:
-        if not _is_chat_allowed(chat_id, rule):
-            return _deny(
-                operation_name,
-                "Session ACL: chat is not in the allowed list for this principal.",
-                params={"chat_id": chat_id},
-            )
+    if (
+        chat_id is not None
+        and operation_name
+        in _WRITE_OPERATIONS
+        | {
+            "get_messages",
+            "get_chat_info",
+        }
+        and not _is_chat_allowed(chat_id, rule)
+    ):
+        return _deny(
+            operation_name,
+            "Session ACL: chat is not in the allowed list for this principal.",
+            params={"chat_id": chat_id},
+        )
 
     if operation_name == "send_message_to_phone" and not _is_empty_lane(rule):
         return _deny(

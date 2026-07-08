@@ -10,7 +10,7 @@ from src.tools.messages.core import _normalize_parse_mode, detect_message_format
 from src.utils.entity import get_entity_by_id
 from src.utils.error_handling import log_and_build_error
 from src.utils.logging_utils import log_operation_start, log_operation_success
-from src.utils.message_format import extract_topic_metadata, build_send_edit_result
+from src.utils.message_format import build_send_edit_result, extract_topic_metadata
 
 logger = logging.getLogger(__name__)
 

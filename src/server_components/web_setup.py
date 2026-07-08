@@ -19,6 +19,7 @@ from telethon.errors import PasswordHashInvalidError, SessionPasswordNeededError
 from telethon.errors.rpcerrorlist import PhoneNumberFloodError
 from telethon.tl.functions.account import GetPasswordRequest
 
+from src.auth_errors import categorize_auth_error
 from src.client.connection import (
     disconnect_and_evict_session,
     generate_bearer_token,
@@ -32,8 +33,7 @@ from src.server_components.session_token_validation import (
     session_file_path,
     validate_session_token,
 )
-from src.auth_errors import categorize_auth_error
-from src.telemetry import flush_auth_events, buffer_auth_event
+from src.telemetry import buffer_auth_event, flush_auth_events
 from src.utils.logging_utils import mask_phone_number
 from src.utils.mcp_config import generate_mcp_config_json
 from src.utils.proxy import build_mtproto_client_args

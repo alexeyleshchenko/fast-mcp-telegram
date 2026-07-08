@@ -33,6 +33,7 @@ def _make_config(tmp_path, s3_enabled=False):
     """Create a ServerConfig with the right fields for testing."""
     # Build env overrides so model_post_init doesn't reject the combo
     import os
+
     env = {
         "SERVER_MODE": "http-auth",
         "SESSION_DIR": str(tmp_path),
@@ -128,7 +129,9 @@ class TestDoEvictIo:
         mock_client.disconnect.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_s3_mode_deletes_local_file_on_success(self, s3_config, mock_s3, tmp_path):
+    async def test_s3_mode_deletes_local_file_on_success(
+        self, s3_config, mock_s3, tmp_path
+    ):
         """Local file is deleted only after successful checkpoint+upload."""
         from src.client.connection import _do_evict_io, _s3_local_path
 
@@ -143,10 +146,14 @@ class TestDoEvictIo:
         with patch("src.client.connection.s3_session", mock_s3):
             await _do_evict_io("test_token", mock_client)
 
-        assert not local_path.exists(), "Local file should be deleted after successful upload"
+        assert not local_path.exists(), (
+            "Local file should be deleted after successful upload"
+        )
 
     @pytest.mark.asyncio
-    async def test_s3_mode_keeps_local_file_on_failure(self, s3_config, mock_s3, tmp_path):
+    async def test_s3_mode_keeps_local_file_on_failure(
+        self, s3_config, mock_s3, tmp_path
+    ):
         """Local file is preserved when checkpoint+upload fails."""
         from src.client.connection import _do_evict_io, _s3_local_path
 
@@ -335,11 +342,17 @@ class TestLRUEvictionWithS3:
         mock_cfg.s3_session_storage = True
         mock_cfg.session_name = "default"
 
-        with patch("src.client.connection._load_session_file_for_token", return_value=None), \
-             patch("src.client.connection._build_telegram_client_for_token", return_value=mock_new_client), \
-             patch("src.client.connection.cfg", return_value=mock_cfg), \
-             patch("src.client.connection.s3_session", mock_s3):
-
+        with (
+            patch(
+                "src.client.connection._load_session_file_for_token", return_value=None
+            ),
+            patch(
+                "src.client.connection._build_telegram_client_for_token",
+                return_value=mock_new_client,
+            ),
+            patch("src.client.connection.cfg", return_value=mock_cfg),
+            patch("src.client.connection.s3_session", mock_s3),
+        ):
             # Cache miss — triggers LRU eviction because len(cache) >= max_active
             # _load_session_file_for_token returns None → cache hit path → returns from cache
             result = await _get_client_by_token("old_token_1")
@@ -377,13 +390,23 @@ class TestLRUEvictionWithS3:
         mock_local_path = MagicMock(spec=Path)
         mock_local_path.exists.return_value = True
 
-        with patch("src.client.connection._load_session_file_for_token", return_value=mock_local_path), \
-             patch("src.client.connection._build_telegram_client_for_token", return_value=mock_new_client), \
-             patch("src.client.connection.cfg", return_value=mock_cfg), \
-             patch("src.client.connection.s3_session", mock_s3), \
-             patch("src.client.connection._error_message_suggests_auth_issue", return_value=False), \
-             patch("src.client.connection._log_client_creation_failed"):
-
+        with (
+            patch(
+                "src.client.connection._load_session_file_for_token",
+                return_value=mock_local_path,
+            ),
+            patch(
+                "src.client.connection._build_telegram_client_for_token",
+                return_value=mock_new_client,
+            ),
+            patch("src.client.connection.cfg", return_value=mock_cfg),
+            patch("src.client.connection.s3_session", mock_s3),
+            patch(
+                "src.client.connection._error_message_suggests_auth_issue",
+                return_value=False,
+            ),
+            patch("src.client.connection._log_client_creation_failed"),
+        ):
             result = await _get_client_by_token("new_token")
 
         assert result is mock_new_client
@@ -425,13 +448,23 @@ class TestLRUEvictionWithS3:
         mock_local_path = MagicMock(spec=Path)
         mock_local_path.exists.return_value = True
 
-        with patch("src.client.connection._load_session_file_for_token", return_value=mock_local_path), \
-             patch("src.client.connection._build_telegram_client_for_token", return_value=mock_new_client), \
-             patch("src.client.connection.cfg", return_value=mock_cfg), \
-             patch("src.client.connection.s3_session", mock_s3), \
-             patch("src.client.connection._error_message_suggests_auth_issue", return_value=False), \
-             patch("src.client.connection._log_client_creation_failed"):
-
+        with (
+            patch(
+                "src.client.connection._load_session_file_for_token",
+                return_value=mock_local_path,
+            ),
+            patch(
+                "src.client.connection._build_telegram_client_for_token",
+                return_value=mock_new_client,
+            ),
+            patch("src.client.connection.cfg", return_value=mock_cfg),
+            patch("src.client.connection.s3_session", mock_s3),
+            patch(
+                "src.client.connection._error_message_suggests_auth_issue",
+                return_value=False,
+            ),
+            patch("src.client.connection._log_client_creation_failed"),
+        ):
             await _get_client_by_token("new_token")
 
         assert "old_token" not in _creation_locks
@@ -452,13 +485,15 @@ class TestEnsureConnectionTouchSkip:
         mock_client.connect = AsyncMock()
         mock_client._authorized = True
 
-        with patch(
-            "src.client.connection.verify_authorized_connection",
-            new_callable=AsyncMock,
-        ), patch(
-            "src.client.connection._resolve_session_path_for_token"
-        ) as mock_resolve:
-
+        with (
+            patch(
+                "src.client.connection.verify_authorized_connection",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "src.client.connection._resolve_session_path_for_token"
+            ) as mock_resolve,
+        ):
             mock_path = MagicMock()
             mock_path.with_suffix.return_value = mock_path
             mock_resolve.return_value = mock_path
@@ -476,17 +511,21 @@ class TestEnsureConnectionTouchSkip:
         mock_client = MagicMock()
         mock_client.is_connected.return_value = False
         mock_client.connect = AsyncMock(
-            side_effect=lambda: setattr(mock_client, 'is_connected', MagicMock(return_value=True))
+            side_effect=lambda: setattr(
+                mock_client, "is_connected", MagicMock(return_value=True)
+            )
         )
         mock_client._authorized = True
 
-        with patch(
-            "src.client.connection.verify_authorized_connection",
-            new_callable=AsyncMock,
-        ), patch(
-            "src.client.connection._resolve_session_path_for_token"
-        ) as mock_resolve:
-
+        with (
+            patch(
+                "src.client.connection.verify_authorized_connection",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "src.client.connection._resolve_session_path_for_token"
+            ) as mock_resolve,
+        ):
             mock_path = MagicMock()
             mock_path.with_suffix.return_value = mock_path
             mock_path.touch = MagicMock()
@@ -519,12 +558,14 @@ class TestFatalErrorEviction:
         async with _cache_lock:
             _session_cache["fatal_token"] = (mock_client, time.time())
 
-        with patch(
-            "src.client.connection.verify_authorized_connection",
-            new_callable=AsyncMock,
-            side_effect=Exception("wrong session id: mismatch"),
-        ), patch("src.client.connection.s3_session", mock_s3):
-
+        with (
+            patch(
+                "src.client.connection.verify_authorized_connection",
+                new_callable=AsyncMock,
+                side_effect=Exception("wrong session id: mismatch"),
+            ),
+            patch("src.client.connection.s3_session", mock_s3),
+        ):
             result = await ensure_connection(mock_client, "fatal_token")
             assert result is False
             # Session should be evicted from cache
@@ -554,8 +595,10 @@ class TestCleanupIdleSessionsS3:
         async with _cache_lock:
             _session_cache["idle_s3_token"] = (mock_client, time.time() - 10)
 
-        with patch("src.client.connection.s3_session", mock_s3), \
-             patch("src.client.connection.cfg", return_value=s3_config):
+        with (
+            patch("src.client.connection.s3_session", mock_s3),
+            patch("src.client.connection.cfg", return_value=s3_config),
+        ):
             await cleanup_idle_sessions()
 
         # Session should be evicted and checkpoint+upload called
@@ -580,8 +623,10 @@ class TestCleanupIdleSessionsS3:
         async with _cache_lock:
             _session_cache[default_token] = (mock_client, time.time() - 10)
 
-        with patch("src.client.connection.s3_session", mock_s3), \
-             patch("src.client.connection.cfg", return_value=s3_config):
+        with (
+            patch("src.client.connection.s3_session", mock_s3),
+            patch("src.client.connection.cfg", return_value=s3_config),
+        ):
             await cleanup_idle_sessions()
 
         # Default token should NOT be evicted
@@ -606,8 +651,10 @@ class TestCleanupIdleSessionsS3:
         async with _cache_lock:
             _session_cache["error_token"] = (mock_client, time.time() - 10)
 
-        with patch("src.client.connection.s3_session", mock_s3), \
-             patch("src.client.connection.cfg", return_value=s3_config):
+        with (
+            patch("src.client.connection.s3_session", mock_s3),
+            patch("src.client.connection.cfg", return_value=s3_config),
+        ):
             # Should NOT raise
             await cleanup_idle_sessions()
 
@@ -651,11 +698,17 @@ class TestConcurrentClientCreation:
         mock_local_path.exists.return_value = True
 
         with (
-            patch("src.client.connection._load_session_file_for_token", return_value=mock_local_path),
+            patch(
+                "src.client.connection._load_session_file_for_token",
+                return_value=mock_local_path,
+            ),
             patch("src.client.connection._build_telegram_client_for_token", slow_build),
             patch("src.client.connection.cfg", return_value=mock_cfg),
             patch("src.client.connection.s3_session", mock_s3),
-            patch("src.client.connection._error_message_suggests_auth_issue", return_value=False),
+            patch(
+                "src.client.connection._error_message_suggests_auth_issue",
+                return_value=False,
+            ),
             patch("src.client.connection._log_client_creation_failed"),
         ):
             task1 = asyncio.create_task(_get_client_by_token("concurrent_token"))
@@ -667,13 +720,21 @@ class TestConcurrentClientCreation:
             await asyncio.sleep(0.2)
 
             # The second caller should be blocked on creation_lock — only 1 build active
-            assert build_count == 1, "Only one client should be building while the other waits"
+            assert build_count == 1, (
+                "Only one client should be building while the other waits"
+            )
 
             # Release the blocked build
             proceed.set()
 
             results = await asyncio.gather(task1, task2, return_exceptions=True)
 
-        assert build_count == 1, "Only one client should ever be created across both callers"
-        assert not any(isinstance(r, Exception) for r in results), f"Got exceptions: {results}"
-        assert results[0] is results[1], "Both callers should return the same client instance"
+        assert build_count == 1, (
+            "Only one client should ever be created across both callers"
+        )
+        assert not any(isinstance(r, Exception) for r in results), (
+            f"Got exceptions: {results}"
+        )
+        assert results[0] is results[1], (
+            "Both callers should return the same client instance"
+        )

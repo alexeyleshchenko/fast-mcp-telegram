@@ -24,8 +24,7 @@ def test_http_auth_host_not_overridden():
         api_hash="a" * 32,
     )
     assert cfg.host == "127.0.0.1", (
-        "http-auth mode should respect default 127.0.0.1, "
-        "was overridden to 0.0.0.0"
+        "http-auth mode should respect default 127.0.0.1, was overridden to 0.0.0.0"
     )
 
 
