@@ -1,14 +1,14 @@
 {
   "id": null,
   "uid": "fmt-overview",
-  "title": "fast-mcp-telegram — Telemetry",
+  "title": "fast-mcp-telegram \u2014 Telemetry",
   "tags": [
     "fast-mcp-telegram",
     "telemetry"
   ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 10,
+  "version": 11,
   "refresh": "5m",
   "time": {
     "from": "now-30d",
@@ -43,7 +43,24 @@
     ]
   },
   "annotations": {
-    "list": []
+    "list": [
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "telemetry-pg"
+        },
+        "enable": true,
+        "hide": false,
+        "iconColor": "blue",
+        "name": "Releases",
+        "target": {
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT published_at AS time, tag_name || COALESCE(' \u2014 ' || NULLIF(release_name, ''), '') AS text, ARRAY['release', 'fast-mcp-telegram'] AS tags FROM releases WHERE $__timeFilter(published_at) ORDER BY published_at",
+          "refId": "Anno"
+        }
+      }
+    ]
   },
   "panels": [
     {
@@ -74,7 +91,7 @@
       },
       "targets": [
         {
-          "rawSql": "SELECT count(*) FROM telemetry WHERE $__timeFilter(received_at)\n    AND ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%')",
+          "rawSql": "SELECT count(*) FROM telemetry WHERE $__timeFilter(received_at)\n    AND coalesce(payload->>'type','') <> 'auth' AND ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%')",
           "format": "table",
           "refId": "A"
         }
@@ -127,7 +144,7 @@
       },
       "targets": [
         {
-          "rawSql": "SELECT count(DISTINCT instance_id) FROM telemetry WHERE $__timeFilter(received_at)\n    AND ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%')",
+          "rawSql": "SELECT count(DISTINCT instance_id) FROM telemetry WHERE $__timeFilter(received_at)\n    AND coalesce(payload->>'type','') <> 'auth' AND ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%')",
           "format": "table",
           "refId": "A"
         }
@@ -167,7 +184,7 @@
     {
       "id": 4,
       "type": "stat",
-      "title": "Active (24h)",
+      "title": "Active (in range)",
       "gridPos": {
         "h": 4,
         "w": 6,
@@ -180,7 +197,7 @@
       },
       "targets": [
         {
-          "rawSql": "SELECT count(DISTINCT instance_id) FROM telemetry WHERE $__timeFilter(received_at)\n    AND ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%')",
+          "rawSql": "SELECT count(DISTINCT instance_id) FROM telemetry WHERE $__timeFilter(received_at)\n    AND coalesce(payload->>'type','') <> 'auth' AND ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%')",
           "format": "table",
           "refId": "A"
         }
@@ -241,7 +258,7 @@
       },
       "targets": [
         {
-          "rawSql": "SELECT EXTRACT(EPOCH FROM now() - max(received_at))::int FROM telemetry WHERE $__timeFilter(received_at)\n    AND ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%')",
+          "rawSql": "SELECT EXTRACT(EPOCH FROM now() - max(received_at))::int FROM telemetry WHERE $__timeFilter(received_at)\n    AND coalesce(payload->>'type','') <> 'auth' AND ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%')",
           "format": "table",
           "refId": "A"
         }
@@ -315,7 +332,7 @@
       },
       "targets": [
         {
-          "rawSql": "SELECT payload->>'os' AS metric, count(DISTINCT instance_id)::int AS value FROM telemetry WHERE $__timeFilter(received_at)\n    AND ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%') GROUP BY 1 ORDER BY 2 DESC",
+          "rawSql": "SELECT payload->>'os' AS metric, count(DISTINCT instance_id)::int AS value FROM telemetry WHERE $__timeFilter(received_at)\n    AND coalesce(payload->>'type','') <> 'auth' AND ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%') GROUP BY 1 ORDER BY 2 DESC",
           "format": "table",
           "refId": "A"
         }
@@ -365,7 +382,7 @@
       },
       "targets": [
         {
-          "rawSql": "SELECT COALESCE(payload->'features'->>'server_mode', 'stdio') AS metric, count(DISTINCT instance_id)::int AS value FROM telemetry WHERE $__timeFilter(received_at)\n    AND ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%') GROUP BY 1 ORDER BY 2 DESC",
+          "rawSql": "SELECT COALESCE(payload->'features'->>'server_mode', 'stdio') AS metric, count(DISTINCT instance_id)::int AS value FROM telemetry WHERE $__timeFilter(received_at)\n    AND coalesce(payload->>'type','') <> 'auth' AND ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%') GROUP BY 1 ORDER BY 2 DESC",
           "format": "table",
           "refId": "A"
         }
@@ -415,7 +432,7 @@
       },
       "targets": [
         {
-          "rawSql": "WITH latest AS (SELECT DISTINCT ON (instance_id) instance_id, payload->>'ver' AS version FROM telemetry WHERE $__timeFilter(received_at)\n    AND ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%') ORDER BY instance_id, received_at DESC) SELECT version AS metric, count(*)::int AS value FROM latest GROUP BY 1 ORDER BY 2 DESC",
+          "rawSql": "WITH latest AS (SELECT DISTINCT ON (instance_id) instance_id, payload->>'ver' AS version FROM telemetry WHERE $__timeFilter(received_at)\n    AND coalesce(payload->>'type','') <> 'auth' AND ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%') ORDER BY instance_id, received_at DESC) SELECT version AS metric, count(*)::int AS value FROM latest GROUP BY 1 ORDER BY 2 DESC",
           "format": "table",
           "refId": "A"
         }
@@ -465,7 +482,7 @@
       },
       "targets": [
         {
-          "rawSql": "WITH latest AS (SELECT DISTINCT ON (instance_id) instance_id, payload->>'py' AS py FROM telemetry WHERE $__timeFilter(received_at)\n    AND ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%') ORDER BY instance_id, received_at DESC) SELECT py AS metric, count(*)::int AS value FROM latest GROUP BY 1 ORDER BY 2 DESC",
+          "rawSql": "WITH latest AS (SELECT DISTINCT ON (instance_id) instance_id, payload->>'py' AS py FROM telemetry WHERE $__timeFilter(received_at)\n    AND coalesce(payload->>'type','') <> 'auth' AND ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%') ORDER BY instance_id, received_at DESC) SELECT py AS metric, count(*)::int AS value FROM latest GROUP BY 1 ORDER BY 2 DESC",
           "format": "table",
           "refId": "A"
         }
@@ -527,7 +544,7 @@
       },
       "targets": [
         {
-          "rawSql": "SELECT date_trunc('day', received_at) AS time, count(*) AS \"events\" FROM telemetry WHERE $__timeFilter(received_at) AND ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%') GROUP BY 1 ORDER BY 1",
+          "rawSql": "SELECT date_trunc('day', received_at) AS time, count(*) AS \"events\" FROM telemetry WHERE $__timeFilter(received_at) AND coalesce(payload->>'type','') <> 'auth' AND ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%') GROUP BY 1 ORDER BY 1",
           "format": "time_series",
           "refId": "A"
         }
@@ -607,7 +624,7 @@
       },
       "targets": [
         {
-          "rawSql": "SELECT date_trunc('day', received_at) AS time, count(DISTINCT instance_id) AS \"instances\" FROM telemetry WHERE $__timeFilter(received_at) AND ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%') GROUP BY 1 ORDER BY 1",
+          "rawSql": "SELECT date_trunc('day', received_at) AS time, count(DISTINCT instance_id) AS \"instances\" FROM telemetry WHERE $__timeFilter(received_at) AND coalesce(payload->>'type','') <> 'auth' AND ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%') GROUP BY 1 ORDER BY 1",
           "format": "time_series",
           "refId": "A"
         }
@@ -699,7 +716,7 @@
       },
       "targets": [
         {
-          "rawSql": "WITH hb_lookback AS (\n  SELECT instance_id, received_at, key,\n         (value->>'calls')::int AS cum,\n         LAG((value->>'calls')::int) OVER (\n           PARTITION BY instance_id, key ORDER BY received_at\n         ) AS prev\n  FROM telemetry, jsonb_each(payload->'tools')\n  WHERE jsonb_typeof(payload->'tools') = 'object'\n    AND (value->>'calls')::int > 0\n    AND received_at >= $__timeFrom() - interval '30 days'\n    AND received_at <= $__timeTo()\n    AND ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%')\n),\ndeltas AS (\n  SELECT key, received_at,\n    CASE WHEN prev IS NULL THEN cum\n         WHEN cum >= prev THEN cum - prev\n         ELSE 0 END AS delta\n  FROM hb_lookback\n  WHERE received_at >= $__timeFrom()\n)\nSELECT key AS metric, SUM(delta) AS value\nFROM deltas WHERE delta > 0\nGROUP BY key ORDER BY value DESC",
+          "rawSql": "WITH hb_lookback AS (\n  SELECT instance_id, received_at, key,\n         (value->>'calls')::int AS cum,\n         LAG((value->>'calls')::int) OVER (\n           PARTITION BY instance_id, key ORDER BY received_at\n         ) AS prev\n  FROM telemetry, jsonb_each(payload->'tools')\n  WHERE jsonb_typeof(payload->'tools') = 'object'\n    AND (value->>'calls')::int > 0\n    AND received_at >= $__timeFrom() - interval '30 days'\n    AND received_at <= $__timeTo()\n    AND coalesce(payload->>'type','') <> 'auth' AND ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%')\n),\ndeltas AS (\n  SELECT key, received_at,\n    CASE WHEN prev IS NULL THEN cum\n         WHEN cum >= prev THEN cum - prev\n         ELSE 0 END AS delta\n  FROM hb_lookback\n  WHERE received_at >= $__timeFrom()\n)\nSELECT key AS metric, SUM(delta) AS value\nFROM deltas WHERE delta > 0\nGROUP BY key ORDER BY value DESC",
           "format": "table",
           "refId": "A"
         }
@@ -756,7 +773,7 @@
       },
       "targets": [
         {
-          "rawSql": "WITH hb_lookback AS (\n  SELECT instance_id, received_at, key,\n         (value->>'calls')::int AS cum_calls,\n         (value->>'errors')::int AS cum_errors,\n         (value->>'duration_ms')::float AS cum_duration,\n         LAG((value->>'calls')::int) OVER (PARTITION BY instance_id, key ORDER BY received_at) AS prev_calls,\n         LAG((value->>'errors')::int) OVER (PARTITION BY instance_id, key ORDER BY received_at) AS prev_errors,\n         LAG((value->>'duration_ms')::float) OVER (PARTITION BY instance_id, key ORDER BY received_at) AS prev_duration\n  FROM telemetry, jsonb_each(payload->'tools')\n  WHERE jsonb_typeof(payload->'tools') = 'object'\n    AND (value->>'calls')::int > 0\n    AND received_at >= $__timeFrom() - interval '30 days'\n    AND received_at <= $__timeTo()\n    AND ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%')\n),\ndeltas AS (\n  SELECT key, received_at,\n    CASE WHEN prev_calls IS NULL THEN cum_calls WHEN cum_calls >= prev_calls THEN cum_calls - prev_calls ELSE 0 END AS delta_calls,\n    CASE WHEN prev_errors IS NULL THEN cum_errors WHEN cum_errors >= prev_errors THEN cum_errors - prev_errors ELSE 0 END AS delta_errors,\n    CASE WHEN prev_duration IS NULL THEN cum_duration WHEN cum_duration >= prev_duration THEN cum_duration - prev_duration ELSE 0 END AS delta_duration\n  FROM hb_lookback\n  WHERE received_at >= $__timeFrom()\n)\nSELECT key AS \"Tool\",\n       SUM(delta_calls) AS \"Calls\",\n       SUM(delta_errors) AS \"Errors\",\n       CASE WHEN SUM(delta_calls) > 0 THEN ROUND(SUM(delta_errors)::numeric / SUM(delta_calls) * 100, 1) ELSE 0 END AS \"Error %\",\n       CASE WHEN SUM(delta_calls) > 0 THEN ROUND(SUM(delta_duration)::numeric / SUM(delta_calls), 0) ELSE 0 END AS \"Avg ms\"\nFROM deltas WHERE delta_calls > 0\nGROUP BY key ORDER BY \"Calls\" DESC",
+          "rawSql": "WITH hb_lookback AS (\n  SELECT instance_id, received_at, key,\n         (value->>'calls')::int AS cum_calls,\n         (value->>'errors')::int AS cum_errors,\n         (value->>'duration_ms')::float AS cum_duration,\n         LAG((value->>'calls')::int) OVER (PARTITION BY instance_id, key ORDER BY received_at) AS prev_calls,\n         LAG((value->>'errors')::int) OVER (PARTITION BY instance_id, key ORDER BY received_at) AS prev_errors,\n         LAG((value->>'duration_ms')::float) OVER (PARTITION BY instance_id, key ORDER BY received_at) AS prev_duration\n  FROM telemetry, jsonb_each(payload->'tools')\n  WHERE jsonb_typeof(payload->'tools') = 'object'\n    AND (value->>'calls')::int > 0\n    AND received_at >= $__timeFrom() - interval '30 days'\n    AND received_at <= $__timeTo()\n    AND coalesce(payload->>'type','') <> 'auth' AND ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%')\n),\ndeltas AS (\n  SELECT key, received_at,\n    CASE WHEN prev_calls IS NULL THEN cum_calls WHEN cum_calls >= prev_calls THEN cum_calls - prev_calls ELSE 0 END AS delta_calls,\n    CASE WHEN prev_errors IS NULL THEN cum_errors WHEN cum_errors >= prev_errors THEN cum_errors - prev_errors ELSE 0 END AS delta_errors,\n    CASE WHEN prev_duration IS NULL THEN cum_duration WHEN cum_duration >= prev_duration THEN cum_duration - prev_duration ELSE 0 END AS delta_duration\n  FROM hb_lookback\n  WHERE received_at >= $__timeFrom()\n)\nSELECT key AS \"Tool\",\n       SUM(delta_calls) AS \"Calls\",\n       SUM(delta_errors) AS \"Errors\",\n       CASE WHEN SUM(delta_calls) > 0 THEN ROUND(SUM(delta_errors)::numeric / SUM(delta_calls) * 100, 1) ELSE 0 END AS \"Error %\",\n       CASE WHEN SUM(delta_calls) > 0 THEN ROUND(SUM(delta_duration)::numeric / SUM(delta_calls), 0) ELSE 0 END AS \"Avg ms\"\nFROM deltas WHERE delta_calls > 0\nGROUP BY key ORDER BY \"Calls\" DESC",
           "format": "table",
           "refId": "A"
         }
@@ -865,7 +882,7 @@
       },
       "targets": [
         {
-          "rawSql": "WITH hb_lookback AS (\n  SELECT instance_id, received_at, tool_key, param_key,\n         (param_value->>'calls')::int AS cum_calls,\n         (param_value->>'errors')::int AS cum_errors,\n         (param_value->>'duration_ms')::float AS cum_duration,\n         LAG((param_value->>'calls')::int) OVER (PARTITION BY instance_id, tool_key, param_key ORDER BY received_at) AS prev_calls,\n         LAG((param_value->>'errors')::int) OVER (PARTITION BY instance_id, tool_key, param_key ORDER BY received_at) AS prev_errors,\n         LAG((param_value->>'duration_ms')::float) OVER (PARTITION BY instance_id, tool_key, param_key ORDER BY received_at) AS prev_duration\n  FROM telemetry, jsonb_each(payload->'tools') AS t(tool_key, tool_value), jsonb_each(tool_value->'param_sets') AS p(param_key, param_value)\n  WHERE jsonb_typeof(payload->'tools') = 'object'\n    AND jsonb_typeof(tool_value->'param_sets') = 'object'\n    AND received_at >= $__timeFrom() - interval '30 days'\n    AND received_at <= $__timeTo()\n    AND ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%')\n),\ndeltas AS (\n  SELECT tool_key, param_key, received_at,\n    CASE WHEN prev_calls IS NULL THEN cum_calls WHEN cum_calls >= prev_calls THEN cum_calls - prev_calls ELSE 0 END AS delta_calls,\n    CASE WHEN prev_errors IS NULL THEN cum_errors WHEN cum_errors >= prev_errors THEN cum_errors - prev_errors ELSE 0 END AS delta_errors,\n    CASE WHEN prev_duration IS NULL THEN cum_duration WHEN cum_duration >= prev_duration THEN cum_duration - prev_duration ELSE 0 END AS delta_duration\n  FROM hb_lookback\n  WHERE received_at >= $__timeFrom()\n)\nSELECT tool_key AS \"Tool\",\n       param_key AS \"Paramset\",\n       SUM(delta_calls) AS \"Calls\",\n       SUM(delta_errors) AS \"Errors\",\n       CASE WHEN SUM(delta_calls) > 0 THEN ROUND(SUM(delta_errors)::numeric / SUM(delta_calls) * 100, 1) ELSE 0 END AS \"Error %\",\n       CASE WHEN SUM(delta_calls) > 0 THEN ROUND(SUM(delta_duration)::numeric / SUM(delta_calls))::int ELSE 0 END AS \"Avg ms\"\nFROM deltas WHERE delta_calls > 0\nGROUP BY tool_key, param_key ORDER BY tool_key, \"Calls\" DESC",
+          "rawSql": "WITH hb_lookback AS (\n  SELECT instance_id, received_at, tool_key, param_key,\n         (param_value->>'calls')::int AS cum_calls,\n         (param_value->>'errors')::int AS cum_errors,\n         (param_value->>'duration_ms')::float AS cum_duration,\n         LAG((param_value->>'calls')::int) OVER (PARTITION BY instance_id, tool_key, param_key ORDER BY received_at) AS prev_calls,\n         LAG((param_value->>'errors')::int) OVER (PARTITION BY instance_id, tool_key, param_key ORDER BY received_at) AS prev_errors,\n         LAG((param_value->>'duration_ms')::float) OVER (PARTITION BY instance_id, tool_key, param_key ORDER BY received_at) AS prev_duration\n  FROM telemetry, jsonb_each(payload->'tools') AS t(tool_key, tool_value), jsonb_each(tool_value->'param_sets') AS p(param_key, param_value)\n  WHERE jsonb_typeof(payload->'tools') = 'object'\n    AND jsonb_typeof(tool_value->'param_sets') = 'object'\n    AND received_at >= $__timeFrom() - interval '30 days'\n    AND received_at <= $__timeTo()\n    AND coalesce(payload->>'type','') <> 'auth' AND ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%')\n),\ndeltas AS (\n  SELECT tool_key, param_key, received_at,\n    CASE WHEN prev_calls IS NULL THEN cum_calls WHEN cum_calls >= prev_calls THEN cum_calls - prev_calls ELSE 0 END AS delta_calls,\n    CASE WHEN prev_errors IS NULL THEN cum_errors WHEN cum_errors >= prev_errors THEN cum_errors - prev_errors ELSE 0 END AS delta_errors,\n    CASE WHEN prev_duration IS NULL THEN cum_duration WHEN cum_duration >= prev_duration THEN cum_duration - prev_duration ELSE 0 END AS delta_duration\n  FROM hb_lookback\n  WHERE received_at >= $__timeFrom()\n)\nSELECT tool_key AS \"Tool\",\n       param_key AS \"Paramset\",\n       SUM(delta_calls) AS \"Calls\",\n       SUM(delta_errors) AS \"Errors\",\n       CASE WHEN SUM(delta_calls) > 0 THEN ROUND(SUM(delta_errors)::numeric / SUM(delta_calls) * 100, 1) ELSE 0 END AS \"Error %\",\n       CASE WHEN SUM(delta_calls) > 0 THEN ROUND(SUM(delta_duration)::numeric / SUM(delta_calls))::int ELSE 0 END AS \"Avg ms\"\nFROM deltas WHERE delta_calls > 0\nGROUP BY tool_key, param_key ORDER BY tool_key, \"Calls\" DESC",
           "format": "table",
           "refId": "A"
         }
@@ -974,7 +991,7 @@
       },
       "targets": [
         {
-          "rawSql": "WITH latest AS (SELECT DISTINCT ON (instance_id) instance_id, payload->'features' AS features FROM telemetry WHERE $__timeFilter(received_at)\n    AND ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%') ORDER BY instance_id, received_at DESC) SELECT feature AS \"Feature\", count(*) FILTER (WHERE enabled) AS \"Enabled\", count(*) AS \"Total\" FROM latest, LATERAL (VALUES ('block_private_ips', (features->>'block_private_ips')::boolean), ('acl_enabled', (features->>'acl_enabled')::boolean), ('bot_api_token', (features->>'bot_api_token')::boolean), ('mtproto_proxy', (features->>'mtproto_proxy')::boolean), ('allow_http_urls', (features->>'allow_http_urls')::boolean), ('prefix_mcp_tools_with_account', (features->>'prefix_mcp_tools_with_account')::boolean)) AS t(feature, enabled) GROUP BY feature ORDER BY \"Enabled\" DESC",
+          "rawSql": "WITH latest AS (SELECT DISTINCT ON (instance_id) instance_id, payload->'features' AS features FROM telemetry WHERE $__timeFilter(received_at)\n    AND coalesce(payload->>'type','') <> 'auth' AND ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%') ORDER BY instance_id, received_at DESC) SELECT feature AS \"Feature\", count(*) FILTER (WHERE enabled) AS \"Enabled\", count(*) AS \"Total\" FROM latest, LATERAL (VALUES ('block_private_ips', (features->>'block_private_ips')::boolean), ('acl_enabled', (features->>'acl_enabled')::boolean), ('bot_api_token', (features->>'bot_api_token')::boolean), ('mtproto_proxy', (features->>'mtproto_proxy')::boolean), ('allow_http_urls', (features->>'allow_http_urls')::boolean), ('prefix_mcp_tools_with_account', (features->>'prefix_mcp_tools_with_account')::boolean)) AS t(feature, enabled) GROUP BY feature ORDER BY \"Enabled\" DESC",
           "format": "table",
           "refId": "A"
         }
@@ -1038,7 +1055,7 @@
     {
       "id": 19,
       "type": "table",
-      "title": "Mode × OS",
+      "title": "Mode \u00d7 OS",
       "gridPos": {
         "h": 7,
         "w": 12,
@@ -1051,7 +1068,7 @@
       },
       "targets": [
         {
-          "rawSql": "SELECT COALESCE(payload->'features'->>'server_mode', 'stdio') AS \"Mode\", payload->>'os' AS \"OS\", count(DISTINCT instance_id) AS \"Instances\" FROM telemetry WHERE $__timeFilter(received_at)\n    AND ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%') GROUP BY 1, 2 ORDER BY \"Instances\" DESC",
+          "rawSql": "SELECT COALESCE(payload->'features'->>'server_mode', 'stdio') AS \"Mode\", payload->>'os' AS \"OS\", count(DISTINCT instance_id) AS \"Instances\" FROM telemetry WHERE $__timeFilter(received_at)\n    AND coalesce(payload->>'type','') <> 'auth' AND ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%') GROUP BY 1, 2 ORDER BY \"Instances\" DESC",
           "format": "table",
           "refId": "A"
         }
@@ -1104,7 +1121,7 @@
       },
       "targets": [
         {
-          "rawSql": "WITH latest AS (SELECT DISTINCT ON (instance_id) instance_id, received_at, payload FROM telemetry WHERE $__timeFilter(received_at)\n    AND ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%') ORDER BY instance_id, received_at DESC) SELECT LEFT(instance_id, 8) AS \"Instance\", payload->>'ver' AS \"Version\", payload->>'os' AS \"OS\", payload->>'py' AS \"Python\", COALESCE(payload->'features'->>'server_mode', 'stdio') AS \"Mode\", (payload->'counters'->>'total_calls')::int AS \"Calls\", (payload->'counters'->>'errors')::int AS \"Errors\", (payload->'runtime'->>'sessions')::int AS \"Sessions\", (payload->'runtime'->>'session_files')::int AS \"Files\", to_char(received_at, 'YYYY-MM-DD HH24:MI') AS \"Last Seen\" FROM latest ORDER BY received_at DESC",
+          "rawSql": "WITH latest AS (SELECT DISTINCT ON (instance_id) instance_id, received_at, payload FROM telemetry WHERE $__timeFilter(received_at)\n    AND coalesce(payload->>'type','') <> 'auth' AND ('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%') ORDER BY instance_id, received_at DESC) SELECT LEFT(instance_id, 8) AS \"Instance\", payload->>'ver' AS \"Version\", payload->>'os' AS \"OS\", payload->>'py' AS \"Python\", COALESCE(payload->'features'->>'server_mode', 'stdio') AS \"Mode\", (payload->'counters'->>'total_calls')::int AS \"Calls\", (payload->'counters'->>'errors')::int AS \"Errors\", (payload->'runtime'->>'sessions')::int AS \"Sessions\", (payload->'runtime'->>'session_files')::int AS \"Files\", to_char(received_at, 'YYYY-MM-DD HH24:MI') AS \"Last Seen\" FROM latest ORDER BY received_at DESC",
           "format": "table",
           "refId": "A"
         }
@@ -1295,7 +1312,7 @@
     {
       "id": 27,
       "type": "stat",
-      "title": "Auth Errors (24h)",
+      "title": "Auth Errors (in range)",
       "gridPos": {
         "h": 4,
         "w": 6,
@@ -1356,7 +1373,7 @@
     {
       "id": 28,
       "type": "stat",
-      "title": "Flows Today",
+      "title": "Auth Flows (in range)",
       "gridPos": {
         "h": 4,
         "w": 6,
@@ -1646,7 +1663,7 @@
     {
       "id": 33,
       "type": "timeseries",
-      "title": "Avg Flow Duration (sec)",
+      "title": "Flow Duration (sec)",
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -1659,7 +1676,7 @@
       },
       "targets": [
         {
-          "rawSql": "WITH flows AS (\n    SELECT e->>'flow_id' AS fid,\n           min(received_at) AS time,\n           min((e->>'ts')::numeric) AS min_ts,\n           max((e->>'ts')::numeric) AS max_ts\n    FROM telemetry, jsonb_array_elements(payload->'events') AS e(event)\n    WHERE payload->>'type' = 'auth'\n      AND $__timeFilter(received_at) AND (('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%'))\n    GROUP BY e->>'flow_id'\n    HAVING count(*) > 1\n)\nSELECT time,\n       round(max_ts - min_ts, 2) AS \"duration_sec\"\nFROM flows\nWHERE max_ts > min_ts\nORDER BY 1",
+          "rawSql": "WITH flows AS (\n    SELECT payload->>'flow_id' AS fid,\n           date_trunc('day', min(received_at)) AS day,\n           min((e->>'ts')::numeric) AS min_ts,\n           max((e->>'ts')::numeric) AS max_ts\n    FROM telemetry, jsonb_array_elements(payload->'events') AS e(event)\n    WHERE payload->>'type' = 'auth'\n      AND $__timeFilter(received_at) AND (('$exclude_prod' = '0' OR instance_id NOT LIKE '997b38cd%'))\n    GROUP BY payload->>'flow_id'\n    HAVING count(*) > 1\n)\nSELECT day AS time,\n       round(avg(max_ts - min_ts)::numeric, 2) AS \"avg_duration_sec\"\nFROM flows\nWHERE max_ts > min_ts\nGROUP BY 1\nORDER BY 1",
           "format": "time_series",
           "refId": "A"
         }
