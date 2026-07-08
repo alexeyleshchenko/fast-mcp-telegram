@@ -528,7 +528,7 @@ async def test_find_chats_impl_with_date_filters_uses_dialog_search():
 
 
 @pytest.mark.asyncio
-async def test_find_chats_impl_date_filter_no_results_returns_error():
+async def test_find_chats_impl_date_filter_no_results_returns_empty_with_note():
     """When date filters find nothing, should return success with empty chats and note."""
 
     async def mock_iter_dialogs(limit=None, folder=None):
@@ -601,7 +601,7 @@ async def test_find_chats_global_multi_term_merges_results():
 
 
 @pytest.mark.asyncio
-async def test_find_chats_global_multi_term_no_results_returns_error():
+async def test_find_chats_global_multi_term_no_results_returns_empty_with_note():
     """Multi-term global search with no results should return success with empty chats and note."""
 
     async def mock_gen_empty():

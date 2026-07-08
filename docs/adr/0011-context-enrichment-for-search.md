@@ -1,7 +1,8 @@
 # ADR 0011: Context Enrichment for Message Search Results
 
-**Status:** proposed
+**Status:** accepted
 **Date:** 2026-06-26
+**Accepted:** 2026-07-09
 
 ## Context
 
@@ -14,12 +15,12 @@ Industry precedent:
 Telegram API capabilities already partially used by fast-mcp-telegram:
 - `client.iter_messages(entity, offset_id=N)` — fetch messages by position (neighbors)
 - `MessageReplyHeader.reply_to_msg_id` — identify what a message replies to
-- `reply_to.forum_topic` + `_extract_topic_metadata` — forum topic handling
+- `reply_to.forum_topic` + `extract_topic_metadata` — forum topic handling
 - `_fetch_direct_replies(client, entity, msg_id)` in `replies.py` — fetch reply threads
 
 ## Decision
 
-Add a `context` parameter to `get_messages` (int, default 0 = disabled) that enriches search results with surrounding conversation context, and an `include_reply_threads` flag for reply thread fetching.
+Add a `context` parameter to `get_messages` (int, default 0 = disabled) that enriches search results with surrounding conversation context, and an `include_replies` flag for reply thread fetching.
 
 ### Cost analysis
 
@@ -46,7 +47,7 @@ When caps are hit, the response includes a note: `"Context enrichment partially 
 | Reply chain depth | One level only | Recursive is expensive and rarely needed |
 | Forum topic scoping | Filter neighbors by `top_msg_id` | Prevents cross-topic context bleed in forum supergroups |
 | Service message filter | Skip `reply_to.forum_topic=True` + no displayable text | Uses existing `message_has_displayable_content()` |
-| Reply threads | Separate `include_reply_threads` flag (default: False) | Decouples expensive per-result fetches; opt-in to avoid surprising latency |
+| Reply threads | Separate `include_replies` flag (default: False) | Decouples expensive per-result fetches; opt-in to avoid surprising latency |
 | Reply thread cap | 5 replies per result | Prevents unbounded response growth |
 | Token budget | No limit | User's requirement |
 | Failure handling | Partial — return results-without-context on error | Enrichment failure must not lose search results |
@@ -63,7 +64,7 @@ Post-processing step after search results are collected:
    c. Batch-fetch all needed messages via `_get_messages_by_ids_batched(client, entity, all_ids, CHUNK=100)`
    d. For forum supergroups: filter neighbors by matching `top_msg_id` to result's topic
    e. Build context envelope per result (see below)
-3. If `include_reply_threads=True`:
+3. If `include_replies=True`:
    a. For results with `replies.replies > 0`, call `_fetch_direct_replies(limit=5)` from `replies.py`
    b. Attach to result's context envelope
 4. Filter out forum topic service messages using `message_has_displayable_content()`
@@ -109,14 +110,14 @@ When context is enabled and `reply_to_message` is resolved:
 ### New parameters
 
 - `context: int = 0` on `get_messages` — window size for before/after context (clamped 1–10)
-- `include_reply_threads: bool = False` — whether to fetch reply threads (opt-in to avoid surprising latency)
+- `include_replies: bool = False` — whether to fetch reply threads (opt-in to avoid surprising latency)
 - Only applies to search/browse mode (query + chat_id); ignored for `message_ids` and `reply_to_id` modes
 - Enrichment wrapper in `_dispatch_search_mode` — no threading through `_handle_query_mode` or `_collect_messages_in_chat`
 
 ### Code changes
 
-- `mcp_tool_types.py` — import existing `ContextWindow` type (already at line 218); add `IncludeReplyThreads` type
-- `tools_register.py` — add `context` and `include_reply_threads` params to `get_messages`
+- `mcp_tool_types.py` — import existing `ContextWindow` type (already at line 218); add `IncludeReplies` type
+- `tools_register.py` — add `context` and `include_replies` params to `get_messages`
 - `core.py` — thread both params through `search_messages_impl` and `_build_search_params`
 - `search_mode.py` — add enrichment wrapper in `_dispatch_search_mode` after result collection
 - `search_generators.py` — no changes (enrichment is post-processing)
@@ -125,7 +126,7 @@ When context is enabled and `reply_to_message` is resolved:
 ### Backward compatibility
 
 - `context=0` (default) = current behavior, no context fields added
-- `include_reply_threads=False` (default) = reply threads not fetched unless explicitly requested
+- `include_replies=False` (default) = reply threads not fetched unless explicitly requested
 - No changes to existing result schema when context is disabled
 
 ### Deferred
@@ -140,7 +141,7 @@ When context is enabled and `reply_to_message` is resolved:
 
 | Reviewer | Finding | Resolution |
 |----------|---------|------------|
-| Simplification | Reply threads should be separate flag | Adopted: `include_reply_threads` flag |
+| Simplification | Reply threads should be separate flag | Adopted: `include_replies` flag |
 | Simplification | Replace count-based threshold with cost-based cap | Adopted: hard cap on IDs and reply thread fetches |
 | Simplification | Merge context_before/after into single list | Adopted: single `context` envelope with `before`/`after` |
 | Simplification | Use lightweight context format | Adopted: id, date, text, sender_id only |
@@ -163,7 +164,7 @@ When context is enabled and `reply_to_message` is resolved:
 | Edge cases | Use batched fetching (CHUNK=100) | Adopted: reuse `_get_messages_by_ids_batched` |
 | Edge cases | Propagate `FloodWaitError` with wait duration | Adopted: include in warning message |
 | Edge cases | Validate `chat_id` required when `context > 0` | Adopted: validation in `_build_search_params` |
-| Edge cases | Default `include_reply_threads` to `False` | Adopted: opt-in to avoid surprising latency |
+| Edge cases | Default `include_replies` to `False` | Adopted: opt-in to avoid surprising latency |
 | Edge cases | Add timeout budget (30s) | Adopted: enrichment phase timeout |
 
 ## References
@@ -172,6 +173,7 @@ When context is enabled and `reply_to_message` is resolved:
 - Anthropic contextual retrieval research
 - PIXION sentence-window retrieval
 - `src/tools/search/search_generators.py` — search implementation
-- `src/tools/search/search_mode.py` — search orchestration
-- `src/tools/search/replies.py` — `_fetch_direct_replies` for reply thread enrichment
+- `src/tools/search/context_enrichment.py` — post-search context wrapper
+- `src/tools/search/replies.py` — `_fetch_replies` for reply thread enrichment
 - `src/tools/search/forum_replies.py` — forum-specific reply handling
+- Design review notes: [0011-context-enrichment-review.md](../research/0011-context-enrichment-review.md), [0011-review-findings.md](../research/0011-review-findings.md)

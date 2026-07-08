@@ -393,6 +393,50 @@ class TestLRUEvictionWithS3:
         assert "mid_token" in _session_cache
         mock_old_client.disconnect.assert_called_once()
 
+    @pytest.mark.asyncio
+    async def test_lru_eviction_cleans_creation_lock(self, s3_config, mock_s3):
+        """LRU eviction should drop per-token creation locks for evicted tokens."""
+        from src.client.connection import (
+            _cache_lock,
+            _creation_locks,
+            _get_client_by_token,
+            _session_cache,
+        )
+
+        mock_old_client = MagicMock()
+        mock_old_client.is_connected.return_value = True
+        mock_old_client.disconnect = AsyncMock()
+
+        mock_new_client = MagicMock()
+        mock_new_client.is_connected.return_value = True
+
+        async with _cache_lock:
+            _session_cache["old_token"] = (mock_old_client, 1000.0)
+            _session_cache["mid_token"] = (MagicMock(), 2000.0)
+        _creation_locks["old_token"] = asyncio.Lock()
+        _creation_locks["mid_token"] = asyncio.Lock()
+
+        mock_cfg = MagicMock()
+        mock_cfg.max_active_sessions = 2
+        mock_cfg.session_directory = s3_config.session_directory
+        mock_cfg.s3_session_storage = True
+        mock_cfg.session_name = "default"
+
+        mock_local_path = MagicMock(spec=Path)
+        mock_local_path.exists.return_value = True
+
+        with patch("src.client.connection._load_session_file_for_token", return_value=mock_local_path), \
+             patch("src.client.connection._build_telegram_client_for_token", return_value=mock_new_client), \
+             patch("src.client.connection.cfg", return_value=mock_cfg), \
+             patch("src.client.connection.s3_session", mock_s3), \
+             patch("src.client.connection._error_message_suggests_auth_issue", return_value=False), \
+             patch("src.client.connection._log_client_creation_failed"):
+
+            await _get_client_by_token("new_token")
+
+        assert "old_token" not in _creation_locks
+        assert "mid_token" in _creation_locks
+
 
 # --- ensure_connection .touch() skip ---
 

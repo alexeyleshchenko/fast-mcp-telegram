@@ -17,7 +17,7 @@ from . import results
 from .forum_replies import (
     ForumAnchorNotInTopicError,
     _collect_forum_anchor_replies,
-    _extract_topic_metadata,
+    extract_topic_metadata,
     _forum_topic_id_from_anchor,
     _is_forum_topic_id,
 )
@@ -43,7 +43,7 @@ async def _find_topic_from_nearby_messages(client, entity, msg_id: int) -> int |
     if not nearby_msgs:
         return None
     for nearby in nearby_msgs:
-        meta = _extract_topic_metadata(nearby)
+        meta = extract_topic_metadata(nearby)
         if meta.get("topic_id") is not None:
             logger.debug(
                 "Nearby msg %d resolved topic %d (forum_topic=%s)",

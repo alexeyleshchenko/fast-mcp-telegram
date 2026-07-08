@@ -12,7 +12,8 @@ from src.utils.error_handling import log_and_build_error
 from src.utils.message_format import response_attachment_warning
 
 from .replies import _handle_reply_mode
-from .search_mode import _DEFAULT_MAX_CONCURRENT, _enrich_with_context, _handle_query_mode
+from .context_enrichment import _enrich_with_context
+from .search_mode import _DEFAULT_MAX_CONCURRENT, _handle_query_mode
 from .types import MessageRetrievalMode, ThreadScope, resolve_mode
 
 
@@ -33,7 +34,7 @@ def _build_search_params(
     max_concurrent: int | None = None,
     from_user: str | None = None,
     context: int = 0,
-    include_reply_threads: bool = False,
+    include_replies: bool = False,
 ) -> dict[str, Any]:
     return {
         "query": query,
@@ -51,7 +52,7 @@ def _build_search_params(
         "max_concurrent": max_concurrent,
         "from_user": from_user,
         "context": context,
-        "include_reply_threads": include_reply_threads,
+        "include_replies": include_replies,
         "is_global_search": chat_id is None,
         "has_query": bool(query and query.strip()),
         "has_date_filter": bool(min_date or max_date),
@@ -90,7 +91,7 @@ async def _dispatch_search_mode(
     thread_scope: ThreadScope,
     from_user: str | None = None,
     context: int = 0,
-    include_reply_threads: bool = False,
+    include_replies: bool = False,
 ) -> dict[str, Any]:
     if mode is MessageRetrievalMode.MESSAGE_IDS:
         if chat_id is None or message_ids is None:
@@ -138,7 +139,7 @@ async def _dispatch_search_mode(
     )
 
     # Apply context enrichment if requested and results available
-    if (context > 0 or include_reply_threads) and chat_id and "messages" in result:
+    if (context > 0 or include_replies) and chat_id and "messages" in result:
         try:
             client = await get_connected_client()
             entity = await get_entity_by_id(chat_id)
@@ -148,14 +149,16 @@ async def _dispatch_search_mode(
                     entity=entity,
                     messages=result["messages"],
                     context=context,
-                    include_reply_threads=include_reply_threads,
+                    include_replies=include_replies,
                 )
                 result["messages"] = messages
                 if ctx_warning:
                     existing = result.get("_warning", "")
                     result["_warning"] = f"{existing}\n{ctx_warning}".strip()
         except Exception as e:
-            logger.warning("Context enrichment failed, returning results without context: %s", e)
+            logger.warning(
+                "Context enrichment failed, returning results without context: %s", e
+            )
 
     return result
 
@@ -198,7 +201,7 @@ async def search_messages_impl(
     max_concurrent: int | None = _DEFAULT_MAX_CONCURRENT,
     from_user: str | None = None,
     context: int = 0,
-    include_reply_threads: bool = False,
+    include_replies: bool = False,
 ) -> dict[str, Any]:
     """
     Unified message retrieval: search, browse, read by IDs, or list replies.
@@ -228,7 +231,7 @@ async def search_messages_impl(
         max_concurrent=max_concurrent,
         from_user=from_user,
         context=context,
-        include_reply_threads=include_reply_threads,
+        include_replies=include_replies,
     )
 
     if thread_scope in ("full", "direct") and reply_to_id is None:
@@ -304,5 +307,5 @@ async def search_messages_impl(
         thread_scope=thread_scope,
         from_user=from_user,
         context=context,
-        include_reply_threads=include_reply_threads,
+        include_replies=include_replies,
     )

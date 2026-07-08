@@ -110,6 +110,17 @@ services:
 
 The service must be on the `traefik-public` network (already configured). Traefik handles SSL via `certResolver: le`.
 
+### Deploy script (VDS)
+
+For operators with SSH access to a production host, [`scripts/deploy.sh`](../scripts/deploy.sh) rsyncs the working tree, builds a version-tagged Docker image on the remote, runs `docker compose up --wait`, and rolls back to the previous tag if the health check fails within 90 seconds.
+
+```bash
+./scripts/deploy.sh              # uses git describe for the image tag
+./scripts/deploy.sh v0.42.0      # explicit version tag
+```
+
+Defaults: remote host `apps` (from `~/.ssh/config`), remote dir `/root/fast-mcp-telegram`. Override with `REMOTE_HOST` and `REMOTE_DIR`. Requires Docker on the remote and a committed tree (rsync excludes `.env` and session files).
+
 **Step 4 — Start the server**
 
 ```bash
@@ -149,6 +160,8 @@ See [Web Setup Interface](#web-setup-interface) for detailed instructions.
 ```
 
 **Health check:** `curl https://your-domain.com/health`
+
+> **Reverse proxy:** HTTP mode sets FastMCP `allowed_hosts=["*"]` so Traefik or similar proxies can forward any `Host` header; restrict at the proxy if needed.
 
 **MCP discovery (HTTP modes):** `GET /.well-known/mcp/server-card.json` returns server metadata and the registered tool list (built from the live FastMCP registry). Useful for Smithery and similar installers; does not require an active Telegram session.
 
@@ -295,6 +308,7 @@ API_HASH=your_api_hash
 
 # Optional
 SERVER_MODE=http-auth             # stdio (default) or http-auth for remote
+HOST=127.0.0.1                    # Bind address (use 0.0.0.0 for production HTTP behind a proxy)
 PORT=8000                          # Server port (http-auth mode)
 LOG_LEVEL=INFO                    # Logging verbosity
 SESSION_NAME=telegram             # Session file name (stdio mode only)

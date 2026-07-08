@@ -195,7 +195,7 @@ Telegram search has specific limitations that AI models should understand to pro
 
 ### Context Enrichment
 
-When you need surrounding conversation context for search results, use `context` and `include_reply_threads`:
+When you need surrounding conversation context for search results, use `context` and `include_replies`:
 
 ```json
 // Search with 3 messages before/after each result
@@ -211,7 +211,7 @@ When you need surrounding conversation context for search results, use `context`
   "chat_id": "-1001234567890",
   "query": "announcement",
   "context": 2,
-  "include_reply_threads": true,
+  "include_replies": true,
   "limit": 10
 }}
 
@@ -220,7 +220,7 @@ When you need surrounding conversation context for search results, use `context`
   "chat_id": "-1001234567890",
   "query": "question",
   "context": 0,
-  "include_reply_threads": true,
+  "include_replies": true,
   "limit": 5
 }}
 ```
@@ -241,12 +241,22 @@ When you need surrounding conversation context for search results, use `context`
 
 **Notes:**
 - `context` is clamped to 1–10. Default 0 = disabled.
-- `include_reply_threads` is opt-in (default false) — each result with replies costs one extra API call.
+- `include_replies` is opt-in (default false) — each result with replies costs one extra API call.
 - Context uses a lightweight format (id, date, text, sender_id) to save tokens.
 - Enrichment is disabled when result count exceeds cost caps (500 IDs, 20 reply fetches).
 - Requires `chat_id` — not available for global search.
 - Forum topics: neighbors are filtered to the same topic.
 - On enrichment failure, results are returned without context (never loses search results).
+
+## Empty results vs errors
+
+A successful search that finds **no messages** returns a normal tool result with `"messages": []` (or `"chats": []` for `find_chats`), **not** `ok: false`. Check the collection length first.
+
+When present, the optional **`note`** field explains why nothing matched (query text, date range, reply target, etc.). Use it to decide whether to broaden the query — do not retry the same call expecting an error.
+
+**Still errors (not empty collections):** missing required parameters, session not authorized, network failures, ACL denials.
+
+See [Tools Reference — Empty search results](Tools-Reference.md#empty-search-results) and [ADR 0012](adr/0012-empty-result-consistency.md).
 
 ## Performance Tips
 
@@ -271,11 +281,13 @@ When you need surrounding conversation context for search results, use `context`
 ## Troubleshooting
 
 ### No Results Found
-1. Try simpler, more common words
-2. Use partial words for broader matches
-3. Try related terms with comma separation
-4. Check if the search should be chat-specific
-5. Verify the search terms are likely to appear in messages
+1. Confirm the response is `messages: []` with an optional `note` — that is success, not a failure
+2. Read `note` if present for context (query too narrow, date range, etc.)
+3. Try simpler, more common words
+4. Use partial words for broader matches
+5. Try related terms with comma separation
+6. Check if the search should be chat-specific
+7. Verify the search terms are likely to appear in messages
 
 ### Too Many Results
 1. Add date filters to narrow the time range

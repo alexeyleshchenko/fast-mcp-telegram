@@ -7,7 +7,7 @@ Covers:
 - not touching params with defaults already set
 """
 
-from src.tools.mtproto import _fill_missing_int_defaults
+from src.tools.mtproto_tl import _fill_missing_int_defaults
 
 
 class TestFillMissingIntDefaults:

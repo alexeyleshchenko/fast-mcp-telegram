@@ -1,5 +1,15 @@
 ## Current Work Focus
 
+**Review-fix cycles (2026-07-09):** Branch `fix/review-cycles` — parallel review findings addressed through two fix waves.
+
+- **Cycle 1 (correctness):** Auth `ts` int contract + collector float coercion; MTProto int coercion scoped to `annotation is int`; `self`/`me` alias; context enrichment budget skip + log demotion; ADR 0012 test coverage.
+- **Cycle 2 (structure/docs):** `context_enrichment.py` extract; shared `auth_errors.categorize_auth_error`; operator docs (empty `note`, attachments, HOST, deploy.sh); ADR 0011/0012 accepted; telemetry trace sanitization; `.env.remote` gitignored.
+- **Re-review verdict:** nitpicks only (uncommitted new modules must be included when committing).
+- **Clean breaks (2026-07-09):** `buffer_auth_event`, `include_replies`, public `extract_topic_metadata` / `parse_telegram_url`, `mtproto_tl.py` split, ADR 0011 review notes → `docs/research/`.
+- **Next:** commit branch when ready; optional `message_format` package split remains on roadmap.
+
+---
+
 **GetPeerDialogsRequest hang fix — v0.28.2 (2026-06-03):** Released — fix for issue #51 merged and deployed.
 
 - **Root cause:** `iter_dialogs` returns entities with stale `access_hash` (deleted/expired accounts). GetPeerDialogsRequest hangs ~30s per chunk when given these entities. Fixed by storing `dialog.date` directly during flags iteration and skipping GetPeerDialogsRequest for ~200 flags-matched entities.

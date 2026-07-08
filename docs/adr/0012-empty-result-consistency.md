@@ -1,7 +1,8 @@
 # ADR 0012: Empty Result Consistency — Return Success, Not Error, for Zero-Result Queries
 
-**Status:** proposed
+**Status:** accepted
 **Date:** 2026-07-06
+**Accepted:** 2026-07-09
 
 ## Context
 

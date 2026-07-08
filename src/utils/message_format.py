@@ -511,7 +511,7 @@ def _build_media_placeholder(message) -> dict[str, Any] | None:
     return placeholder or None
 
 
-def _extract_topic_metadata(message: Any) -> dict[str, Any]:
+def extract_topic_metadata(message: Any) -> dict[str, Any]:
     """Extract topic_id from a Telegram message reply_to metadata."""
     reply_to = getattr(message, "reply_to", None)
     reply_to_msg_id = getattr(message, "reply_to_msg_id", None) or getattr(
@@ -558,7 +558,7 @@ async def build_message_result(
         result["reply_to_msg_id"] = reply_to_msg_id
 
     # Topic metadata: derived from reply_to.forum_topic (set on forum thread messages).
-    result |= _extract_topic_metadata(message)
+    result |= extract_topic_metadata(message)
 
     if hasattr(message, "media") and message.media:
         media_placeholder = _build_media_placeholder(message)

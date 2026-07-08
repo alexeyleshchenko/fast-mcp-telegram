@@ -203,6 +203,27 @@ async def test_thread_scope_auto_forum_topic_id_uses_get_replies():
 
 
 @pytest.mark.asyncio
+@patch("src.tools.search.replies.extract_topic_metadata")
+async def test_find_topic_from_nearby_messages_uses_range_fetch(mock_extract):
+    """Nearby topic resolution must use range fetch to preserve reply_to metadata."""
+    from src.tools.search.replies import _find_topic_from_nearby_messages
+
+    mock_client = MagicMock()
+    mock_entity = MagicMock()
+    nearby = MagicMock()
+    nearby.id = 101
+    mock_client.get_messages = AsyncMock(return_value=[nearby])
+    mock_extract.return_value = {"topic_id": 42}
+
+    topic_id = await _find_topic_from_nearby_messages(mock_client, mock_entity, 100)
+
+    assert topic_id == 42
+    mock_client.get_messages.assert_awaited_once_with(
+        mock_entity, limit=3, offset_id=101
+    )
+
+
+@pytest.mark.asyncio
 async def test_forum_topic_id_fallback_when_anchor_not_in_topic():
     """Topic ids misclassified as in-topic anchors fall back to GetReplies."""
     entity = make_forum_channel(100, "Forum", forum=True)
@@ -223,7 +244,7 @@ async def test_forum_topic_id_fallback_when_anchor_not_in_topic():
 
     with (
         patch(
-            "src.tools.search.forum_replies._extract_topic_metadata",
+            "src.tools.search.forum_replies.extract_topic_metadata",
             return_value={},
         ),
         patch(

@@ -87,7 +87,7 @@ _TELEGRAM_URL_RE = re.compile(
 )
 
 
-def _parse_telegram_url(text: str) -> str | None:
+def parse_telegram_url(text: str) -> str | None:
     """Parse a Telegram URL and extract a peer identifier.
 
     Handles:
@@ -323,13 +323,13 @@ async def get_entity_by_id(entity_id, *, client: TelegramClient | None = None):
         client = await get_connected_client()
     peer = None
     try:
-        # Special handling for 'me' identifier (Saved Messages)
-        if entity_id == "me":
+        # Special handling for 'me' / 'self' (Saved Messages / current user)
+        if entity_id in ("me", "self"):
             return await client.get_me()
 
         # Resolve Telegram URLs (t.me/…) to peer identifiers
         if isinstance(entity_id, str):
-            parsed = _parse_telegram_url(entity_id)
+            parsed = parse_telegram_url(entity_id)
             if parsed is not None:
                 entity_id = parsed
                 logger.debug("Parsed Telegram URL to peer identifier: %s", entity_id)

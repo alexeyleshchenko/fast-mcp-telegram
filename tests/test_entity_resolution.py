@@ -183,3 +183,20 @@ async def test_get_entity_by_id_phone_not_converted_to_int(mock_get_client):
     calls = mock_client.get_entity.call_args_list
     assert len(calls) == 1
     assert calls[0][0][0] == "+15551234567"  # string, not int
+
+
+@pytest.mark.asyncio
+@patch("src.utils.entity.get_connected_client", new_callable=AsyncMock)
+async def test_get_entity_by_id_self_like_me(mock_get_client):
+    """'self' should resolve to the current user like 'me'."""
+    mock_client = MagicMock()
+    mock_me = MagicMock(id=424242)
+    mock_client.get_me = AsyncMock(return_value=mock_me)
+    mock_get_client.return_value = mock_client
+
+    from src.utils.entity import get_entity_by_id
+
+    result = await get_entity_by_id("self")
+    assert result is mock_me
+    mock_client.get_me.assert_awaited_once()
+    mock_client.get_entity.assert_not_called()

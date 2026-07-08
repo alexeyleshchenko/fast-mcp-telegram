@@ -12,7 +12,7 @@ from src.tools.messages import (
     edit_message_impl,
     send_message_impl,
 )
-from src.utils.message_format import _extract_topic_metadata, build_message_result
+from src.utils.message_format import extract_topic_metadata, build_message_result
 from tests.conftest import make_forum_channel, make_topic_message
 
 
@@ -637,49 +637,49 @@ async def test_get_chat_info_forum_topics_failure_is_non_fatal():
     assert "topics_has_more" not in result
 
 
-def test_extract_topic_metadata_prefers_reply_to_top_id():
+def testextract_topic_metadata_prefers_reply_to_top_id():
     message = SimpleNamespace(
         reply_to_msg_id=10,
         reply_to=SimpleNamespace(
             reply_to_top_id=99, reply_to_msg_id=55, forum_topic=True
         ),
     )
-    assert _extract_topic_metadata(message) == {"topic_id": 99}
+    assert extract_topic_metadata(message) == {"topic_id": 99}
 
 
-def test_extract_topic_metadata_uses_message_reply_to_msg_id_fallback():
+def testextract_topic_metadata_uses_message_reply_to_msg_id_fallback():
     message = SimpleNamespace(
         reply_to_msg_id=42,
         reply_to=SimpleNamespace(
             reply_to_top_id=None, reply_to_msg_id=None, forum_topic=True
         ),
     )
-    assert _extract_topic_metadata(message) == {"topic_id": 42}
+    assert extract_topic_metadata(message) == {"topic_id": 42}
 
 
-def test_extract_topic_metadata_uses_reply_object_reply_to_msg_id_fallback():
+def testextract_topic_metadata_uses_reply_object_reply_to_msg_id_fallback():
     message = SimpleNamespace(
         reply_to_msg_id=None,
         reply_to=SimpleNamespace(
             reply_to_top_id=None, reply_to_msg_id=77, forum_topic=True
         ),
     )
-    assert _extract_topic_metadata(message) == {"topic_id": 77}
+    assert extract_topic_metadata(message) == {"topic_id": 77}
 
 
-def test_extract_topic_metadata_non_forum_returns_empty_even_with_reply_ids():
+def testextract_topic_metadata_non_forum_returns_empty_even_with_reply_ids():
     message = SimpleNamespace(
         reply_to_msg_id=55,
         reply_to=SimpleNamespace(
             reply_to_top_id=None, reply_to_msg_id=55, forum_topic=False
         ),
     )
-    assert _extract_topic_metadata(message) == {}
+    assert extract_topic_metadata(message) == {}
 
 
-def test_extract_topic_metadata_without_reply_data_returns_empty():
+def testextract_topic_metadata_without_reply_data_returns_empty():
     message = SimpleNamespace(reply_to_msg_id=None, reply_to=None)
-    assert _extract_topic_metadata(message) == {}
+    assert extract_topic_metadata(message) == {}
 
 
 @pytest.mark.asyncio

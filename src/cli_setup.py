@@ -15,42 +15,17 @@ import qrcode
 from pydantic import Field
 from pydantic_settings import CliImplicitFlag, SettingsConfigDict
 from telethon import TelegramClient
-from telethon.errors import (
-    FloodWaitError,
-    PasswordHashInvalidError,
-    PhoneNumberBannedError,
-    PhoneNumberInvalidError,
-    PhoneNumberUnoccupiedError,
-    SessionPasswordNeededError,
-)
+from telethon.errors import PasswordHashInvalidError, SessionPasswordNeededError
 from telethon.tl.functions.account import GetPasswordRequest
 
+from src.auth_errors import categorize_auth_error
 from src.client.connection import generate_bearer_token
 from src.utils.logging_utils import mask_phone_number
 
 from .config.server_config import ServerConfig, ServerMode
-from .telemetry import flush_auth_events, send_auth_event
+from .telemetry import flush_auth_events, buffer_auth_event
 from .utils.mcp_config import generate_mcp_config_json
 from .utils.proxy import build_mtproto_client_args
-
-
-def _categorize_cli_error(exc: BaseException) -> str:
-    """Map a Telethon/OS exception to an ADR 0008 error category string."""
-    if isinstance(exc, PasswordHashInvalidError):
-        return "2fa_wrong_password"
-    if isinstance(exc, FloodWaitError):
-        return "flood_wait"
-    if isinstance(exc, PhoneNumberBannedError):
-        return "phone_banned"
-    if isinstance(exc, PhoneNumberInvalidError):
-        return "phone_invalid"
-    if isinstance(exc, PhoneNumberUnoccupiedError):
-        return "phone_unoccupied"
-    if isinstance(exc, ConnectionError):
-        return "connect_failed"
-    if isinstance(exc, (TimeoutError, OSError)):
-        return "timeout"
-    return "unknown"
 
 
 def _is_interactive_terminal() -> bool:
@@ -179,11 +154,11 @@ async def _wait_for_qr_scan(
         except TimeoutError:
             if attempt >= max_retries - 1:
                 print("\n❌ QR code expired. Maximum retries reached.")
-                send_auth_event(
+                buffer_auth_event(
                     event="qr_expired", flow_id=flow_id, method=method, branch=branch
                 )
                 raise QrScanFailedError() from None
-            send_auth_event(
+            buffer_auth_event(
                 event="qr_expired", flow_id=flow_id, method=method, branch=branch
             )
             try:
@@ -191,7 +166,7 @@ async def _wait_for_qr_scan(
             except Exception as recreate_err:
                 print(f"\n❌ Failed to regenerate QR: {recreate_err}")
                 raise QrScanFailedError() from recreate_err
-            send_auth_event(
+            buffer_auth_event(
                 event="qr_session_created",
                 flow_id=flow_id,
                 method=method,
@@ -217,7 +192,7 @@ async def _handle_qr_2fa(
     await _print_2fa_password_hint(client)
     for pwd_attempt in range(3):
         password = getpass.getpass("Please enter your 2FA password: ")
-        send_auth_event(
+        buffer_auth_event(
             event="user_submitted_password",
             flow_id=flow_id,
             method=method,
@@ -225,7 +200,7 @@ async def _handle_qr_2fa(
         )
         try:
             await client.sign_in(password=password)
-            send_auth_event(
+            buffer_auth_event(
                 event="password_validated",
                 flow_id=flow_id,
                 method=method,
@@ -233,7 +208,7 @@ async def _handle_qr_2fa(
             )
             return True
         except PasswordHashInvalidError:
-            send_auth_event(
+            buffer_auth_event(
                 event="password_validated",
                 flow_id=flow_id,
                 method=method,
@@ -266,7 +241,7 @@ async def _qr_login_flow(
             print("\u274c Telethon QR login did not return a valid URL")
             return False
 
-        send_auth_event(
+        buffer_auth_event(
             event="qr_session_created", flow_id=flow_id, method="qr", branch="qr_scan"
         )
 
@@ -283,7 +258,7 @@ async def _qr_login_flow(
         try:
             await _wait_for_qr_scan(qr_login, flow_id=flow_id)
         except QrScanNeeds2FAError:
-            send_auth_event(
+            buffer_auth_event(
                 event="user_scanned_qr", flow_id=flow_id, method="qr", branch="qr_2fa"
             )
             if not await _handle_qr_2fa(client, flow_id=flow_id):
@@ -293,7 +268,7 @@ async def _qr_login_flow(
             flush_auth_events(flow_id)
             return False
         else:
-            send_auth_event(
+            buffer_auth_event(
                 event="user_scanned_qr", flow_id=flow_id, method="qr", branch="qr_scan"
             )
 
@@ -304,7 +279,7 @@ async def _qr_login_flow(
             flush_auth_events(flow_id)
             return False
 
-        send_auth_event(
+        buffer_auth_event(
             event="qr_login_confirmed", flow_id=flow_id, method="qr", branch="qr_scan"
         )
         username = (
@@ -325,7 +300,7 @@ async def _qr_login_flow(
     await client.disconnect()
     _finalize_temp_session_files(temp_session_filename, session_path)
 
-    send_auth_event(
+    buffer_auth_event(
         event="session_established", flow_id=flow_id, method="qr", branch="qr_scan"
     )
     flush_auth_events(flow_id)
@@ -460,7 +435,7 @@ async def setup_telegram_session(
         if setup_config.bot_api_token:
             # Bot authentication
             flow_id = str(uuid.uuid4())
-            send_auth_event(
+            buffer_auth_event(
                 event="user_submitted_bot_token",
                 flow_id=flow_id,
                 method="bot",
@@ -469,7 +444,7 @@ async def setup_telegram_session(
             print("Authenticating as bot...")
             await client.start(bot_token=setup_config.bot_api_token)
             print("Successfully authenticated as bot!")
-            send_auth_event(
+            buffer_auth_event(
                 event="session_established",
                 flow_id=flow_id,
                 method="bot",
@@ -486,7 +461,7 @@ async def setup_telegram_session(
         else:
             # User authentication
             flow_id = str(uuid.uuid4())
-            send_auth_event(
+            buffer_auth_event(
                 event="user_submitted_phone",
                 flow_id=flow_id,
                 method="phone",
@@ -497,7 +472,7 @@ async def setup_telegram_session(
                     f"Sending code to {mask_phone_number(setup_config.phone_number)}..."
                 )
                 await client.send_code_request(setup_config.phone_number)
-                send_auth_event(
+                buffer_auth_event(
                     event="code_requested",
                     flow_id=flow_id,
                     method="phone",
@@ -506,7 +481,7 @@ async def setup_telegram_session(
 
                 # Get verification code (interactive only)
                 code = input("Enter the code you received: ")
-                send_auth_event(
+                buffer_auth_event(
                     event="user_submitted_code",
                     flow_id=flow_id,
                     method="phone",
@@ -515,14 +490,14 @@ async def setup_telegram_session(
 
                 try:
                     await client.sign_in(setup_config.phone_number, code)
-                    send_auth_event(
+                    buffer_auth_event(
                         event="code_validated",
                         flow_id=flow_id,
                         method="phone",
                         branch="phone_code",
                     )
                 except SessionPasswordNeededError:
-                    send_auth_event(
+                    buffer_auth_event(
                         event="code_validated",
                         flow_id=flow_id,
                         method="phone",
@@ -531,7 +506,7 @@ async def setup_telegram_session(
                     print("\nTwo-step verification is enabled for this account.")
                     await _print_2fa_password_hint(client)
                     password = getpass.getpass("Please enter your 2FA password: ")
-                    send_auth_event(
+                    buffer_auth_event(
                         event="user_submitted_password",
                         flow_id=flow_id,
                         method="phone",
@@ -539,14 +514,14 @@ async def setup_telegram_session(
                     )
                     try:
                         await client.sign_in(password=password)
-                        send_auth_event(
+                        buffer_auth_event(
                             event="password_validated",
                             flow_id=flow_id,
                             method="phone",
                             branch="phone_2fa",
                         )
                     except PasswordHashInvalidError:
-                        send_auth_event(
+                        buffer_auth_event(
                             event="password_validated",
                             flow_id=flow_id,
                             method="phone",
@@ -556,17 +531,17 @@ async def setup_telegram_session(
                         flush_auth_events(flow_id)
                         raise
                 except Exception as exc:
-                    send_auth_event(
+                    buffer_auth_event(
                         event="code_validated",
                         flow_id=flow_id,
                         method="phone",
                         branch="phone_code",
-                        error=_categorize_cli_error(exc),
+                        error=categorize_auth_error(exc),
                     )
                     flush_auth_events(flow_id)
                     raise
 
-            send_auth_event(
+            buffer_auth_event(
                 event="session_established",
                 flow_id=flow_id,
                 method="phone",

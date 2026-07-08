@@ -13,7 +13,7 @@ Covers:
 import json
 from types import SimpleNamespace
 
-from src.tools.mtproto import _json_safe
+from src.tools.mtproto_tl import _json_safe
 from src.utils.entity import _ENTITY_DICT_CACHE, _ENTITY_TYPE_CACHE, build_entity_dict
 from src.utils.json_ids import (
     JS_SAFE_MAX,
@@ -107,8 +107,8 @@ class TestJsonSafeMtproto:
         # JS-safe ints stay numeric; out-of-range int64 values are stringified
         values = [
             1,
-            9007199254740991,   # max JS-safe integer (2**53 - 1)
-            9007199254740992,   # first JS-unsafe integer (2**53)
+            9007199254740991,  # max JS-safe integer (2**53 - 1)
+            9007199254740992,  # first JS-unsafe integer (2**53)
             5314748207455037000,
         ]
         out = _json_safe(values)

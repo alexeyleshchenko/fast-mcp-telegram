@@ -60,6 +60,15 @@ class TestAuthPayload:
             payload = AuthPayload.from_dict(data)
             assert payload.branch == branch
 
+    def test_float_ts_coerced_to_int(self):
+        """Client float timestamps are coerced to integer seconds."""
+        data = make_auth_payload()
+        data["ts"] = time.time()
+        data["events"][0]["ts"] = time.time() + 0.5
+        payload = AuthPayload.from_dict(data)
+        assert isinstance(payload.ts, int)
+        assert isinstance(payload.events[0]["ts"], int)
+
     def test_payload_with_error_events(self):
         """Events with error fields pass validation."""
         flow_id = str(uuid.uuid4())

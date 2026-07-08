@@ -61,3 +61,14 @@ def test_host_env_var():
     with patch.dict(os.environ, env, clear=False):
         cfg = ServerConfig()
     assert cfg.host == "0.0.0.0", "HOST env var should be honoured"
+
+
+def test_empty_host_resolves_to_localhost():
+    """Empty host string should fall back to 127.0.0.1."""
+    cfg = ServerConfig(
+        server_mode="http-auth",
+        host="",
+        api_id="12345",
+        api_hash="a" * 32,
+    )
+    assert cfg.host == "127.0.0.1"

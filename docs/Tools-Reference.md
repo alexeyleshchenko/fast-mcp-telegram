@@ -38,6 +38,7 @@ find_chats(
   max_date?: string            // ISO last-activity upper bound; same sources as min_date.
 ) -> {
   chats: Chat[],               // Array of chat/user entities
+  note?: string,               // Optional: only when chats is empty (see Empty search results)
 }
 ```
 
@@ -225,7 +226,7 @@ get_messages(
   max_date?: string,             // ISO date filter (search, browse, and reply/forum-topic modes)
   from_user?: string,            // Sender filter: @username, phone, user id, t.me URL, 'me' (per-chat only)
   context?: number = 0,          // Neighbor messages per side (1–10); 0=disabled. Requires chat_id.
-  include_reply_threads?: boolean = false,  // Fetch up to 5 direct replies per result (opt-in)
+  include_replies?: boolean = false,  // Fetch up to 5 direct replies per result (opt-in)
   auto_expand_batches?: number = 2,  // Extra batches for filtered searches
   include_total_count?: boolean = false  // Include total count (chat search only)
 )
@@ -266,6 +267,7 @@ get_messages(
 {
   "messages": [...],           // List of message dicts
   "has_more": false,           // Boolean (always false for message_ids mode)
+  "note": "No messages found matching query 'launch'",  // Optional: only when messages is empty (see Empty search results)
   "total_count": 123,          // Optional: only if include_total_count=true
   "reply_to_id": 100,          // Optional: only for reply_to_id mode
   "discussion_chat_id": "...", // Optional: only for channel posts with discussion
@@ -273,7 +275,7 @@ get_messages(
 }
 ```
 
-When `context > 0` or `include_reply_threads=true`, each message gains a `context` envelope:
+When `context > 0` or `include_replies=true`, each message gains a `context` envelope:
 ```json
 {
   "id": 500,
@@ -287,7 +289,7 @@ When `context > 0` or `include_reply_threads=true`, each message gains a `contex
 }
 ```
 
-Context messages use a lightweight format (id, date, text, sender_id) to save tokens. `replies` is only populated when `include_reply_threads=true`. `reply_to` is `null` when the message has no reply target. The `context` key is absent entirely when no enrichment is requested.
+Context messages use a lightweight format (id, date, text, sender_id) to save tokens. `replies` is only populated when `include_replies=true`. `reply_to` is `null` when the message has no reply target. The `context` key is absent entirely when no enrichment is requested.
 
 **Features:**
 - **Rich Media Parsing**: Automatically parses Todo lists, polls, photos, documents
@@ -296,7 +298,7 @@ Context messages use a lightweight format (id, date, text, sender_id) to save to
 - **Auto-Detection**: Automatically detects channel posts and uses discussion group
 - **Structured Data**: LLM-friendly JSON structures
 - **Context Optimization**: When `chat_id` is provided (per-chat modes), the `chat` field is omitted from each message to save context. Global search includes `chat` since messages span different chats.
-- **Context Enrichment**: `context` parameter adds surrounding messages (before/after) and reply chains. `include_reply_threads` fetches direct replies. Lightweight format saves tokens. Forum topic-aware.
+- **Context Enrichment**: `context` parameter adds surrounding messages (before/after) and reply chains. `include_replies` fetches direct replies. Lightweight format saves tokens. Forum topic-aware.
 
 **💡 Tips:**
 - **No query**: Returns latest messages from chat
@@ -387,7 +389,7 @@ Context messages use a lightweight format (id, date, text, sender_id) to save to
   "chat_id": "-1001234567890",
   "query": "announcement",
   "context": 2,
-  "include_reply_threads": true,
+  "include_replies": true,
   "limit": 10
 }}
 
@@ -395,7 +397,7 @@ Context messages use a lightweight format (id, date, text, sender_id) to save to
 {"tool": "get_messages", "params": {
   "chat_id": "-1001234567890",
   "query": "question",
-  "include_reply_threads": true,
+  "include_replies": true,
   "limit": 5
 }}
 ```
@@ -732,9 +734,24 @@ When `resolve=true` (default for both MCP tool and HTTP bridge), these parameter
 
 ## Appendix
 
+### Empty search results
+
+When a search or discovery query runs successfully but matches nothing, tools return a **success response with an empty collection**, not `ok: false`. Real failures (auth, network, invalid parameters) still use the error format below.
+
+| Tool | Empty success shape | `note` field |
+| --- | --- | --- |
+| `get_messages` (search/browse) | `{"messages": [], "has_more": false}` | Optional string explaining why (query, date range, filters) |
+| `get_messages` (replies) | `{"messages": [], "has_more": false, "reply_to_id": N}` | Optional string (e.g. no replies for that message) |
+| `find_chats` | `{"chats": []}` | Optional string (query/date context) |
+| `search_contacts` | `[]` | No `note` — raw list return |
+
+The optional **`note`** key is a human-readable diagnostic in `structured_content`. Check `messages` / `chats` length first; read `note` when you need to distinguish "nothing matched" from a silent empty browse. **`note` is absent on non-empty responses.**
+
+Parameter validation errors (e.g. empty query with no `chat_id` on `get_messages`) remain errors, not empty collections. See [ADR 0012](adr/0012-empty-result-consistency.md).
+
 ### Error Handling
 
-This MCP server implements comprehensive error handling with clear, actionable error messages.
+This MCP server implements comprehensive error handling with clear, actionable error messages. Do not treat `ok: false` as "zero results" — use empty collections and optional `note` instead (see above).
 
 **Session Authentication Errors:**
 When a Telegram session is not authorized (e.g., session file missing or expired), tools return:
@@ -891,7 +908,7 @@ All message-returning tools (search, read, send, edit) return messages in a cons
 - Includes MIME type, filename, approximate size, and media type
 - Voice messages include duration and automatic transcription (Premium accounts)
 - Covers: photos, documents, videos, audio, voice messages, polls, todo lists, etc.
-- **`attachment_download_url`** (optional): When the server runs **HTTP transport** and **`DOMAIN`** is a real public host (not a placeholder), documents (non-voice, non-round-video) and photos may include this URL. The URL format is `/v1/attachments/<uuid>/<filename>` — photos get a synthetic `photo_<msg_id>.jpg`. **`GET` does not require a Bearer token**; anyone with the URL can download until the ticket expires (`ATTACHMENT_TICKET_TTL_SECONDS`). Treat links as confidential. Tickets are stored in memory (single-process; restart invalidates them).
+- **`attachment_download_url`** (optional): When the server runs **HTTP transport** and **`DOMAIN`** is a real public host (not a placeholder), photos, documents, voice messages, and round videos may include this URL. The URL format is `/v1/attachments/<uuid>/<filename>` — photos get a synthetic `photo_<msg_id>.jpg`. **`GET` does not require a Bearer token**; anyone with the URL can download until the ticket expires (`ATTACHMENT_TICKET_TTL_SECONDS`). Treat links as confidential. Tickets are stored in memory (single-process; restart invalidates them).
 
 **Voice Message Transcription:**
 - Automatic transcription for Premium Telegram accounts

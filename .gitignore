@@ -55,6 +55,7 @@ coverage.xml
 # Environment variables
 .env
 .env.local
+.env.remote
 
 # MCP specific
 .cursorrules

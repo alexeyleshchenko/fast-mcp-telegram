@@ -5,7 +5,7 @@ from typing import Any
 from telethon.tl.functions.messages import GetForumTopicsByIDRequest
 
 from src.utils.message_format import (
-    _extract_topic_metadata,
+    extract_topic_metadata,
     message_has_displayable_content,
 )
 
@@ -55,7 +55,7 @@ async def _forum_topic_id_from_anchor(client, entity, anchor_message: Any) -> in
     if top_id:
         return top_id
 
-    topic_id = _extract_topic_metadata(anchor_message).get("topic_id")
+    topic_id = extract_topic_metadata(anchor_message).get("topic_id")
     if topic_id is None:
         raise ForumAnchorNotInTopicError(
             f"Message {getattr(anchor_message, 'id', '?')} is not in a forum topic"
@@ -73,7 +73,7 @@ async def _forum_topic_id_from_anchor(client, entity, anchor_message: Any) -> in
             )
             if parent_top:
                 return parent_top
-            parent_topic = _extract_topic_metadata(parent).get("topic_id")
+            parent_topic = extract_topic_metadata(parent).get("topic_id")
             if parent_topic is not None and parent_topic != parent_id:
                 return parent_topic
 

@@ -4,12 +4,12 @@ Covers:
 - _construct_tl_object_from_dict coercing string access_hash back to int
 - _construct_tl_object_from_dict coercing string channel_id/user_id back to int
 - _construct_tl_object_from_dict filling default 0 for missing required params
-- _resolve_one handling URL strings via _parse_telegram_url
+- _resolve_one handling URL strings via parse_telegram_url
 """
 
 import pytest
 
-from src.tools.mtproto import _construct_tl_object_from_dict
+from src.tools.mtproto_tl import _construct_tl_object_from_dict
 
 
 class TestConstructTlObjectIntCoercion:
@@ -63,6 +63,21 @@ class TestConstructTlObjectIntCoercion:
         assert result.user_id == 133526395
         assert isinstance(result.user_id, int)
         assert isinstance(result.access_hash, int)
+
+    def test_phone_and_first_name_stay_strings(self):
+        """Non-int TL fields must not be coerced from numeric-looking strings."""
+        data = {
+            "_": "InputPhoneContact",
+            "client_id": 1,
+            "phone": "+15551234567",
+            "first_name": "12345",
+            "last_name": "Doe",
+        }
+        result = _construct_tl_object_from_dict(data)
+        assert isinstance(result.phone, str)
+        assert result.phone == "+15551234567"
+        assert isinstance(result.first_name, str)
+        assert result.first_name == "12345"
 
     def test_already_int_values_unchanged(self):
         """Int values should pass through unchanged."""

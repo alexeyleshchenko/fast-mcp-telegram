@@ -3,7 +3,6 @@ from __future__ import annotations
 import functools
 import inspect
 import time
-import traceback
 from typing import Any
 
 from fastmcp import FastMCP
@@ -23,7 +22,7 @@ from src.server_components.mcp_tool_types import (
     FilesListParam,
     FilterParam,
     FromUser,
-    IncludeReplyThreads,
+    IncludeReplies,
     IncludeTotalCount,
     LimitChats,
     LimitMessages,
@@ -49,7 +48,7 @@ from src.server_components.mcp_tool_types import (
     TopicsLimit,
 )
 from src.server_components.session_acl import enforce_session_acl
-from src.telemetry import metrics
+from src.telemetry import metrics, sanitize_error_trace
 from src.tools.chat_discovery.chat_info import get_chat_info_impl
 from src.tools.chat_discovery.find_chats import find_chats_impl
 from src.tools.messages import (
@@ -90,7 +89,7 @@ _DESC_GET_MESSAGES = _tool_description(
     "or load replies to a message (comments, forum topics, threads). "
     "Use from_user to filter by sender (server-side, per-chat only). "
     "Use context to include neighboring messages and reply chains around each result. "
-    "Use include_reply_threads to fetch up to 5 direct replies per result. "
+    "Use include_replies to fetch up to 5 direct replies per result. "
     "Do not combine message_ids with query or reply_to_id. "
     "Success: messages, has_more, optional total_count and discussion fields. "
 )
@@ -206,8 +205,8 @@ def mcp_tool_with_restrictions(
             try:
                 try:
                     result = await func(*args, **kwargs)
-                except Exception:
-                    error = traceback.format_exc()
+                except Exception as exc:
+                    error = sanitize_error_trace(exc)
                     raise
                 if isinstance(result, dict) and result.get("ok") is False:
                     error = str(result.get("error", ""))
@@ -290,7 +289,7 @@ def register_tools(mcp: FastMCP) -> None:
         max_date: MaxDate = None,
         from_user: FromUser = None,
         context: ContextWindow = 0,
-        include_reply_threads: IncludeReplyThreads = False,
+        include_replies: IncludeReplies = False,
         auto_expand_batches: AutoExpandBatches = 2,
         include_total_count: IncludeTotalCount = False,
     ) -> SearchResult:
@@ -309,7 +308,7 @@ def register_tools(mcp: FastMCP) -> None:
             thread_scope=thread_scope,
             from_user=from_user,
             context=context,
-            include_reply_threads=include_reply_threads,
+            include_replies=include_replies,
         )
 
     @mcp.tool(

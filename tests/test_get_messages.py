@@ -187,11 +187,13 @@ class TestGetMessagesReplies:
 
     @pytest.mark.asyncio
     @patch("src.tools.search.core._handle_reply_mode", new_callable=AsyncMock)
-    async def test_no_replies_error(self, mock_handler):
-        """Should return error when no replies found."""
+    async def test_no_replies_empty_with_note(self, mock_handler):
+        """Empty replies should return success with note, not error."""
         mock_handler.return_value = {
-            "error": "No replies found for message 100",
-            "ok": False,
+            "messages": [],
+            "has_more": False,
+            "reply_to_id": 100,
+            "note": "No replies found for message 100",
         }
 
         result = await search_messages_impl(
@@ -199,7 +201,29 @@ class TestGetMessagesReplies:
             reply_to_id=100,
         )
 
-        assert "error" in result
+        assert result["messages"] == []
+        assert "note" in result
+        assert "error" not in result
+
+    @pytest.mark.asyncio
+    @patch("src.tools.search.core._handle_query_mode", new_callable=AsyncMock)
+    async def test_empty_search_returns_note_not_error(self, mock_handler):
+        """Empty search should return success with note (ADR 0012)."""
+        mock_handler.return_value = {
+            "messages": [],
+            "has_more": False,
+            "note": "No messages found matching query 'missing'",
+        }
+
+        result = await search_messages_impl(
+            chat_id="me",
+            query="missing",
+            limit=10,
+        )
+
+        assert result["messages"] == []
+        assert "note" in result
+        assert "error" not in result
 
     @pytest.mark.asyncio
     async def test_invalid_chat_for_replies(self):
@@ -504,7 +528,9 @@ class TestGetMessagesFromUser:
     """Test from_user parameter for sender filtering."""
 
     @pytest.mark.asyncio
-    @patch("src.tools.search.search_generators.get_entity_by_id", new_callable=AsyncMock)
+    @patch(
+        "src.tools.search.search_generators.get_entity_by_id", new_callable=AsyncMock
+    )
     @patch("src.tools.search.search_mode.get_connected_client", new_callable=AsyncMock)
     @patch("src.tools.search.search_mode.get_entity_by_id", new_callable=AsyncMock)
     async def test_from_user_passed_to_iter_messages(
@@ -548,10 +574,14 @@ class TestGetMessagesFromUser:
         assert call_kwargs[1].get("from_user") is mock_user_entity
 
     @pytest.mark.asyncio
-    @patch("src.tools.search.search_generators.get_entity_by_id", new_callable=AsyncMock)
+    @patch(
+        "src.tools.search.search_generators.get_entity_by_id", new_callable=AsyncMock
+    )
     @patch("src.tools.search.search_mode.get_connected_client", new_callable=AsyncMock)
     @patch("src.tools.search.search_mode.get_entity_by_id", new_callable=AsyncMock)
-    async def test_from_user_without_query(self, mock_get_entity, mock_get_client, mock_gen_get_entity):
+    async def test_from_user_without_query(
+        self, mock_get_entity, mock_get_client, mock_gen_get_entity
+    ):
         """Should work with from_user only (browse mode with sender filter)."""
         mock_entity = Mock()
         mock_entity.id = 123
@@ -588,7 +618,9 @@ class TestGetMessagesFromUser:
         assert call_kwargs[1].get("from_user") is mock_user_entity
 
     @pytest.mark.asyncio
-    @patch("src.tools.search.search_generators.get_entity_by_id", new_callable=AsyncMock)
+    @patch(
+        "src.tools.search.search_generators.get_entity_by_id", new_callable=AsyncMock
+    )
     @patch("src.tools.search.search_mode.get_connected_client", new_callable=AsyncMock)
     @patch("src.tools.search.search_mode.get_entity_by_id", new_callable=AsyncMock)
     async def test_from_user_with_query_and_date(
@@ -1032,12 +1064,17 @@ class TestGetMessagesContext:
     """Test context enrichment feature for search results."""
 
     @pytest.mark.asyncio
-    @patch("src.tools.search.search_mode._get_messages_by_ids_batched", new_callable=AsyncMock)
+    @patch(
+        "src.tools.search.context_enrichment._get_messages_by_ids_batched",
+        new_callable=AsyncMock,
+    )
     @patch("src.tools.search.search_mode.get_entity_by_id", new_callable=AsyncMock)
     @patch("src.tools.search.core.get_entity_by_id", new_callable=AsyncMock)
     @patch("src.tools.search.core.get_connected_client", new_callable=AsyncMock)
     @patch("src.tools.search.search_mode.get_connected_client", new_callable=AsyncMock)
-    @patch("src.tools.search.search_generators.get_entity_by_id", new_callable=AsyncMock)
+    @patch(
+        "src.tools.search.search_generators.get_entity_by_id", new_callable=AsyncMock
+    )
     @patch("src.tools.search.search_mode.get_entity_by_id", new_callable=AsyncMock)
     async def test_context_disabled_by_default(
         self,
@@ -1085,12 +1122,17 @@ class TestGetMessagesContext:
             assert "context" not in result["messages"][0]
 
     @pytest.mark.asyncio
-    @patch("src.tools.search.search_mode._get_messages_by_ids_batched", new_callable=AsyncMock)
+    @patch(
+        "src.tools.search.context_enrichment._get_messages_by_ids_batched",
+        new_callable=AsyncMock,
+    )
     @patch("src.tools.search.search_mode.get_entity_by_id", new_callable=AsyncMock)
     @patch("src.tools.search.core.get_entity_by_id", new_callable=AsyncMock)
     @patch("src.tools.search.core.get_connected_client", new_callable=AsyncMock)
     @patch("src.tools.search.search_mode.get_connected_client", new_callable=AsyncMock)
-    @patch("src.tools.search.search_generators.get_entity_by_id", new_callable=AsyncMock)
+    @patch(
+        "src.tools.search.search_generators.get_entity_by_id", new_callable=AsyncMock
+    )
     async def test_context_adds_before_after(
         self,
         mock_gen_entity,
@@ -1170,12 +1212,17 @@ class TestGetMessagesContext:
         assert ctx["after"][1]["id"] == 502
 
     @pytest.mark.asyncio
-    @patch("src.tools.search.search_mode._get_messages_by_ids_batched", new_callable=AsyncMock)
+    @patch(
+        "src.tools.search.context_enrichment._get_messages_by_ids_batched",
+        new_callable=AsyncMock,
+    )
     @patch("src.tools.search.search_mode.get_entity_by_id", new_callable=AsyncMock)
     @patch("src.tools.search.core.get_entity_by_id", new_callable=AsyncMock)
     @patch("src.tools.search.core.get_connected_client", new_callable=AsyncMock)
     @patch("src.tools.search.search_mode.get_connected_client", new_callable=AsyncMock)
-    @patch("src.tools.search.search_generators.get_entity_by_id", new_callable=AsyncMock)
+    @patch(
+        "src.tools.search.search_generators.get_entity_by_id", new_callable=AsyncMock
+    )
     async def test_context_reply_to(
         self,
         mock_gen_entity,
@@ -1248,13 +1295,18 @@ class TestGetMessagesContext:
         assert ctx["reply_to"]["text"] == "original message"
 
     @pytest.mark.asyncio
-    @patch("src.tools.search.search_mode._fetch_replies", new_callable=AsyncMock)
-    @patch("src.tools.search.search_mode._get_messages_by_ids_batched", new_callable=AsyncMock)
+    @patch("src.tools.search.context_enrichment._fetch_replies", new_callable=AsyncMock)
+    @patch(
+        "src.tools.search.context_enrichment._get_messages_by_ids_batched",
+        new_callable=AsyncMock,
+    )
     @patch("src.tools.search.search_mode.get_entity_by_id", new_callable=AsyncMock)
     @patch("src.tools.search.core.get_entity_by_id", new_callable=AsyncMock)
     @patch("src.tools.search.core.get_connected_client", new_callable=AsyncMock)
     @patch("src.tools.search.search_mode.get_connected_client", new_callable=AsyncMock)
-    @patch("src.tools.search.search_generators.get_entity_by_id", new_callable=AsyncMock)
+    @patch(
+        "src.tools.search.search_generators.get_entity_by_id", new_callable=AsyncMock
+    )
     async def test_context_reply_threads(
         self,
         mock_gen_entity,
@@ -1265,7 +1317,7 @@ class TestGetMessagesContext:
         mock_batched,
         mock_fetch_replies,
     ):
-        """include_reply_threads=True should fetch replies and attach them."""
+        """include_replies=True should fetch replies and attach them."""
         mock_entity = Mock()
         mock_entity.id = 123
         mock_entity.broadcast = False
@@ -1309,8 +1361,18 @@ class TestGetMessagesContext:
         # Mock _fetch_replies returns (collected, discussion_metadata) tuple
         mock_fetch_replies.return_value = (
             [
-                {"id": 501, "text": "reply 1", "date": "2024-06-15T00:00:00", "sender": {"id": 10}},
-                {"id": 502, "text": "reply 2", "date": "2024-06-15T00:01:00", "sender": {"id": 11}},
+                {
+                    "id": 501,
+                    "text": "reply 1",
+                    "date": "2024-06-15T00:00:00",
+                    "sender": {"id": 10},
+                },
+                {
+                    "id": 502,
+                    "text": "reply 2",
+                    "date": "2024-06-15T00:01:00",
+                    "sender": {"id": 11},
+                },
             ],
             None,
         )
@@ -1320,7 +1382,7 @@ class TestGetMessagesContext:
             query="popular",
             limit=10,
             context=0,
-            include_reply_threads=True,
+            include_replies=True,
         )
 
         assert "messages" in result
@@ -1332,12 +1394,94 @@ class TestGetMessagesContext:
         assert ctx["replies"][1]["id"] == 502
 
     @pytest.mark.asyncio
-    @patch("src.tools.search.search_mode._get_messages_by_ids_batched", new_callable=AsyncMock)
+    @patch("src.tools.search.context_enrichment._fetch_replies", new_callable=AsyncMock)
+    @patch(
+        "src.tools.search.context_enrichment._get_messages_by_ids_batched",
+        new_callable=AsyncMock,
+    )
+    async def test_context_reply_timeout_isolates_other_results(
+        self, mock_batched, mock_fetch_replies
+    ):
+        """One reply fetch timeout should not block other reply threads."""
+        from src.tools.search.context_enrichment import _enrich_with_context
+
+        mock_entity = MagicMock()
+        mock_entity.forum = False
+        mock_client = MagicMock()
+
+        async def fetch_side_effect(client, entity, mid, *args, **kwargs):
+            if mid == 100:
+                raise TimeoutError("slow")
+            return (
+                [{"id": 201, "text": "ok", "date": "2024-01-01", "sender": {"id": 1}}],
+                None,
+            )
+
+        mock_fetch_replies.side_effect = fetch_side_effect
+        mock_batched.return_value = []
+
+        messages = [
+            {"id": 100, "reply_to_msg_id": None},
+            {"id": 200, "reply_to_msg_id": None},
+        ]
+        enriched, _warning = await _enrich_with_context(
+            mock_client,
+            mock_entity,
+            messages,
+            context=0,
+            include_replies=True,
+        )
+
+        assert enriched[0]["context"]["replies"] == []
+        assert len(enriched[1]["context"]["replies"]) == 1
+        assert enriched[1]["context"]["replies"][0]["id"] == 201
+
+    @pytest.mark.asyncio
+    @patch("src.tools.search.context_enrichment._fetch_replies", new_callable=AsyncMock)
+    @patch(
+        "src.tools.search.context_enrichment._get_messages_by_ids_batched",
+        new_callable=AsyncMock,
+    )
+    @patch("src.tools.search.context_enrichment.time.monotonic")
+    async def test_context_budget_timeout_skips_reply_fetches(
+        self, mock_monotonic, mock_batched, mock_fetch_replies
+    ):
+        """When enrichment budget is exceeded, reply fetches are skipped."""
+        from src.tools.search.context_enrichment import _enrich_with_context
+
+        mock_entity = MagicMock()
+        mock_entity.forum = False
+        mock_client = MagicMock()
+        mock_batched.return_value = []
+        times = iter([0.0, 31.0])
+        mock_monotonic.side_effect = lambda: next(times, 31.0)
+
+        messages = [{"id": 100, "reply_to_msg_id": None}]
+        enriched, warning = await _enrich_with_context(
+            mock_client,
+            mock_entity,
+            messages,
+            context=0,
+            include_replies=True,
+        )
+
+        mock_fetch_replies.assert_not_called()
+        assert warning is not None
+        replies = enriched[0].get("context", {}).get("replies")
+        assert replies is None or replies == []
+
+    @pytest.mark.asyncio
+    @patch(
+        "src.tools.search.context_enrichment._get_messages_by_ids_batched",
+        new_callable=AsyncMock,
+    )
     @patch("src.tools.search.search_mode.get_entity_by_id", new_callable=AsyncMock)
     @patch("src.tools.search.core.get_entity_by_id", new_callable=AsyncMock)
     @patch("src.tools.search.core.get_connected_client", new_callable=AsyncMock)
     @patch("src.tools.search.search_mode.get_connected_client", new_callable=AsyncMock)
-    @patch("src.tools.search.search_generators.get_entity_by_id", new_callable=AsyncMock)
+    @patch(
+        "src.tools.search.search_generators.get_entity_by_id", new_callable=AsyncMock
+    )
     async def test_context_partial_failure_returns_messages(
         self,
         mock_gen_entity,
@@ -1386,12 +1530,17 @@ class TestGetMessagesContext:
         assert "context" not in result["messages"][0]
 
     @pytest.mark.asyncio
-    @patch("src.tools.search.search_mode._get_messages_by_ids_batched", new_callable=AsyncMock)
+    @patch(
+        "src.tools.search.context_enrichment._get_messages_by_ids_batched",
+        new_callable=AsyncMock,
+    )
     @patch("src.tools.search.search_mode.get_entity_by_id", new_callable=AsyncMock)
     @patch("src.tools.search.core.get_entity_by_id", new_callable=AsyncMock)
     @patch("src.tools.search.core.get_connected_client", new_callable=AsyncMock)
     @patch("src.tools.search.search_mode.get_connected_client", new_callable=AsyncMock)
-    @patch("src.tools.search.search_generators.get_entity_by_id", new_callable=AsyncMock)
+    @patch(
+        "src.tools.search.search_generators.get_entity_by_id", new_callable=AsyncMock
+    )
     async def test_context_flood_wait_returns_messages(
         self,
         mock_gen_entity,
@@ -1442,12 +1591,17 @@ class TestGetMessagesContext:
         assert "context" not in result["messages"][0]
 
     @pytest.mark.asyncio
-    @patch("src.tools.search.search_mode._get_messages_by_ids_batched", new_callable=AsyncMock)
+    @patch(
+        "src.tools.search.context_enrichment._get_messages_by_ids_batched",
+        new_callable=AsyncMock,
+    )
     @patch("src.tools.search.search_mode.get_entity_by_id", new_callable=AsyncMock)
     @patch("src.tools.search.core.get_entity_by_id", new_callable=AsyncMock)
     @patch("src.tools.search.core.get_connected_client", new_callable=AsyncMock)
     @patch("src.tools.search.search_mode.get_connected_client", new_callable=AsyncMock)
-    @patch("src.tools.search.search_generators.get_entity_by_id", new_callable=AsyncMock)
+    @patch(
+        "src.tools.search.search_generators.get_entity_by_id", new_callable=AsyncMock
+    )
     async def test_context_id_cap(
         self,
         mock_gen_entity,
@@ -1507,7 +1661,9 @@ class TestGetMessagesContext:
             base = 100 + i * 100
             for offset in range(-10, 11):
                 if offset != 0:
-                    all_neighbors.append(make_raw_msg(base + offset, f"neighbor {base+offset}"))
+                    all_neighbors.append(
+                        make_raw_msg(base + offset, f"neighbor {base + offset}")
+                    )
             all_neighbors.append(make_raw_msg(base, f"result {i}"))
 
         mock_batched.return_value = all_neighbors
@@ -1532,43 +1688,49 @@ class TestGetMessagesContextHelpers:
 
     def test_extract_topic_id_from_message_with_reply_to_top_id(self):
         """Should extract topic_id from reply_to.reply_to_top_id."""
-        from src.utils.message_format import _extract_topic_metadata
+        from src.utils.message_format import extract_topic_metadata
 
         msg = MagicMock()
-        msg.reply_to = MagicMock(reply_to_top_id=42, forum_topic=True, reply_to_msg_id=10)
+        msg.reply_to = MagicMock(
+            reply_to_top_id=42, forum_topic=True, reply_to_msg_id=10
+        )
         msg.reply_to_msg_id = None
-        assert _extract_topic_metadata(msg).get("topic_id") == 42
+        assert extract_topic_metadata(msg).get("topic_id") == 42
 
     def test_extract_topic_id_from_message_with_forum_topic(self):
         """Should extract topic_id from reply_to_msg_id when forum_topic=True."""
-        from src.utils.message_format import _extract_topic_metadata
+        from src.utils.message_format import extract_topic_metadata
 
         msg = MagicMock()
-        msg.reply_to = MagicMock(reply_to_top_id=None, forum_topic=True, reply_to_msg_id=10)
+        msg.reply_to = MagicMock(
+            reply_to_top_id=None, forum_topic=True, reply_to_msg_id=10
+        )
         msg.reply_to_msg_id = None
-        assert _extract_topic_metadata(msg).get("topic_id") == 10
+        assert extract_topic_metadata(msg).get("topic_id") == 10
 
     def test_extract_topic_id_from_message_no_topic(self):
         """Should return None for non-forum messages."""
-        from src.utils.message_format import _extract_topic_metadata
+        from src.utils.message_format import extract_topic_metadata
 
         msg = MagicMock()
-        msg.reply_to = MagicMock(reply_to_top_id=None, forum_topic=False, reply_to_msg_id=None)
+        msg.reply_to = MagicMock(
+            reply_to_top_id=None, forum_topic=False, reply_to_msg_id=None
+        )
         msg.reply_to_msg_id = None
-        assert _extract_topic_metadata(msg).get("topic_id") is None
+        assert extract_topic_metadata(msg).get("topic_id") is None
 
     def test_extract_topic_id_from_message_no_reply_to(self):
         """Should return empty dict when reply_to is None."""
-        from src.utils.message_format import _extract_topic_metadata
+        from src.utils.message_format import extract_topic_metadata
 
         msg = MagicMock()
         msg.reply_to = None
         msg.reply_to_msg_id = None
-        assert _extract_topic_metadata(msg) == {}
+        assert extract_topic_metadata(msg) == {}
 
     def test_is_valid_context_neighbor_filters_service_messages(self):
         """Should reject service messages (no displayable content)."""
-        from src.tools.search.search_mode import _is_valid_context_neighbor
+        from src.tools.search.context_enrichment import _is_valid_context_neighbor
 
         msg = MagicMock()
         msg.text = None
@@ -1580,7 +1742,7 @@ class TestGetMessagesContextHelpers:
 
     def test_is_valid_context_neighbor_accepts_text_messages(self):
         """Should accept messages with text content."""
-        from src.tools.search.search_mode import _is_valid_context_neighbor
+        from src.tools.search.context_enrichment import _is_valid_context_neighbor
 
         msg = MagicMock()
         msg.text = "hello"
@@ -1589,25 +1751,29 @@ class TestGetMessagesContextHelpers:
 
     def test_is_valid_context_neighbor_forum_topic_mismatch(self):
         """Should reject neighbors from different forum topics."""
-        from src.tools.search.search_mode import _is_valid_context_neighbor
+        from src.tools.search.context_enrichment import _is_valid_context_neighbor
 
         msg = MagicMock()
         msg.text = "other topic msg"
-        msg.reply_to = MagicMock(reply_to_top_id=99, forum_topic=True, reply_to_msg_id=None)
+        msg.reply_to = MagicMock(
+            reply_to_top_id=99, forum_topic=True, reply_to_msg_id=None
+        )
         assert _is_valid_context_neighbor(msg, True, 42) is False
 
     def test_is_valid_context_neighbor_forum_topic_match(self):
         """Should accept neighbors from the same forum topic."""
-        from src.tools.search.search_mode import _is_valid_context_neighbor
+        from src.tools.search.context_enrichment import _is_valid_context_neighbor
 
         msg = MagicMock()
         msg.text = "same topic msg"
-        msg.reply_to = MagicMock(reply_to_top_id=42, forum_topic=True, reply_to_msg_id=None)
+        msg.reply_to = MagicMock(
+            reply_to_top_id=42, forum_topic=True, reply_to_msg_id=None
+        )
         assert _is_valid_context_neighbor(msg, True, 42) is True
 
     def test_lightweight_from_raw(self):
         """Should extract id, date, text, sender_id from raw message."""
-        from src.tools.search.search_mode import _lightweight_from_raw
+        from src.tools.search.context_enrichment import _lightweight_from_raw
 
         msg = MagicMock()
         msg.id = 100
@@ -1627,7 +1793,7 @@ class TestGetMessagesContextHelpers:
 
     def test_lightweight_from_result(self):
         """Should extract id, date, text, sender_id from result dict."""
-        from src.tools.search.search_mode import _lightweight_from_result
+        from src.tools.search.context_enrichment import _lightweight_from_result
 
         result_dict = {
             "id": 100,
@@ -1646,7 +1812,7 @@ class TestGetMessagesContextHelpers:
 
     def test_lightweight_from_result_no_sender(self):
         """Should handle None sender gracefully."""
-        from src.tools.search.search_mode import _lightweight_from_result
+        from src.tools.search.context_enrichment import _lightweight_from_result
 
         result_dict = {
             "id": 100,

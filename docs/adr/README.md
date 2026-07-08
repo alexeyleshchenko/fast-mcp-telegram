@@ -26,5 +26,5 @@ Concise records of significant technical decisions for fast-mcp-telegram.
 | [0008](0008-auth-telemetry-events.md) | Auth Telemetry Events — Buffered flow-level auth instrumentation | accepted (2026-06-19) |
 | [0009](0009-s3-session-storage.md) | S3 Session Storage for Ephemeral Deployments | proposed (2026-06-17) |
 | [0010](0010-north-star-pivot.md) | North Star Pivot — Best Telegram Bridge for AI Agents | accepted (2026-06-15) |
-| [0011](0011-context-enrichment-for-search.md) | Context Enrichment for Message Search Results | proposed (2026-06-26) |
-| [0012](0012-empty-result-consistency.md) | Empty Result Consistency — Return Success, Not Error, for Zero-Result Queries | proposed (2026-07-06) |
+| [0011](0011-context-enrichment-for-search.md) | Context Enrichment for Message Search Results | accepted (2026-07-09) |
+| [0012](0012-empty-result-consistency.md) | Empty Result Consistency — Return Success, Not Error, for Zero-Result Queries | accepted (2026-07-09) |

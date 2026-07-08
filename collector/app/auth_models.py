@@ -79,6 +79,33 @@ _UUID_RE = re.compile(
     re.IGNORECASE,
 )
 
+
+def _coerce_ts(value: Any) -> int:
+    """Normalize payload timestamps to integer unix seconds."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValidationError("ts must be an integer")
+    return int(value)
+
+
+def _normalize_auth_payload_dict(data: dict[str, Any]) -> dict[str, Any]:
+    """Coerce numeric ts fields before dataclass construction."""
+    normalized = dict(data)
+    if "ts" in normalized:
+        normalized["ts"] = _coerce_ts(normalized["ts"])
+    events = normalized.get("events")
+    if isinstance(events, list):
+        normalized_events: list[dict[str, Any]] = []
+        for ev in events:
+            if not isinstance(ev, dict):
+                normalized_events.append(ev)
+                continue
+            ev_copy = dict(ev)
+            if "ts" in ev_copy:
+                ev_copy["ts"] = _coerce_ts(ev_copy["ts"])
+            normalized_events.append(ev_copy)
+        normalized["events"] = normalized_events
+    return normalized
+
 # Timestamp drift limits (same as TelemetryPayload)
 _FUTURE_DRIFT_SECONDS = 300  # 5 min
 _OLD_WINDOW_SECONDS = 7 * 24 * 3600  # 7 days
@@ -213,7 +240,8 @@ class AuthPayload:
         extra = set(data) - known
         if extra:
             raise ValidationError(f"Unexpected fields: {', '.join(sorted(extra))}")
+        normalized = _normalize_auth_payload_dict(data)
         try:
-            return cls(**data)
+            return cls(**normalized)
         except TypeError as exc:
             raise ValidationError(str(exc)) from exc

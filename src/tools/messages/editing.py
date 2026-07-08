@@ -10,7 +10,7 @@ from src.tools.messages.core import _normalize_parse_mode, detect_message_format
 from src.utils.entity import get_entity_by_id
 from src.utils.error_handling import log_and_build_error
 from src.utils.logging_utils import log_operation_start, log_operation_success
-from src.utils.message_format import _extract_topic_metadata, build_send_edit_result
+from src.utils.message_format import extract_topic_metadata, build_send_edit_result
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +67,7 @@ async def edit_message_impl(
         )
 
         result = build_send_edit_result(edited_message, chat, "edited")
-        result |= _extract_topic_metadata(edited_message)
+        result |= extract_topic_metadata(edited_message)
 
         log_operation_success("Message edited", chat_id)
         return result

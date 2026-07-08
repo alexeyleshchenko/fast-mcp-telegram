@@ -19,6 +19,7 @@ import platform
 import sys
 import threading
 import time
+import traceback
 import uuid
 from pathlib import Path
 
@@ -26,6 +27,18 @@ from src._version import __version__
 from src.config.server_config import cfg
 
 logger = logging.getLogger(__name__)
+
+# Max length for sanitized error traces shipped in heartbeat payloads.
+_MAX_ERROR_TRACE_LEN = 512
+
+
+def sanitize_error_trace(exc: BaseException) -> str:
+    """Return exception type and message only — no stack frames or local paths."""
+    text = "".join(traceback.format_exception_only(type(exc), exc)).strip()
+    if len(text) > _MAX_ERROR_TRACE_LEN:
+        return text[:_MAX_ERROR_TRACE_LEN]
+    return text
+
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -433,7 +446,7 @@ def _post_json(payload: dict, label: str) -> None:
 _auth_buffers: dict[str, list[dict]] = {}
 
 
-def send_auth_event(
+def buffer_auth_event(
     *,
     event: str,
     flow_id: str,
@@ -459,7 +472,7 @@ def send_auth_event(
         return
 
     entry: dict = {
-        "ts": time.time(),
+        "ts": int(time.time()),
         "event": event,
         "flow_id": flow_id,
         "method": method,
@@ -491,7 +504,7 @@ def flush_auth_events(flow_id: str) -> None:
         "type": "auth",
         "iid": get_instance_id(),
         "flow_id": flow_id,
-        "ts": time.time(),
+        "ts": int(time.time()),
         "ver": __version__,
         "method": method,
         "branch": branch,

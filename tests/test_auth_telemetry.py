@@ -1,7 +1,7 @@
 """Tests for auth telemetry (ADR 0008).
 
 Tests the client-side auth telemetry implementation:
-- send_auth_event accumulates events in per-flow buffer
+- buffer_auth_event accumulates events in per-flow buffer
 - flush_auth_events sends batched HTTP POST
 - flush_auth_events clears buffer after send
 - flush_auth_events handles network errors silently
@@ -66,16 +66,16 @@ def _sync_threads(monkeypatch):
     monkeypatch.setattr(threading, "Thread", _SyncThread)
 
 
-# ───────────────────────────── send_auth_event ───────────────────────────
+# ───────────────────────────── buffer_auth_event ───────────────────────────
 
 
 class TestSendAuthEvent:
-    """send_auth_event accumulates events in per-flow buffer."""
+    """buffer_auth_event accumulates events in per-flow buffer."""
 
-    def test_send_auth_event_accumulates(self, tel):
+    def test_buffer_auth_event_accumulates(self, tel):
         """Events are accumulated in the buffer keyed by flow_id."""
         flow_id = str(uuid.uuid4())
-        tel.send_auth_event(
+        tel.buffer_auth_event(
             event="user_submitted_phone",
             flow_id=flow_id,
             method="phone",
@@ -85,22 +85,22 @@ class TestSendAuthEvent:
         assert len(tel._auth_buffers[flow_id]) == 1
         assert tel._auth_buffers[flow_id][0]["event"] == "user_submitted_phone"
 
-    def test_send_auth_event_multiple_events(self, tel):
+    def test_buffer_auth_event_multiple_events(self, tel):
         """Multiple events accumulate in the same flow buffer."""
         flow_id = str(uuid.uuid4())
-        tel.send_auth_event(
+        tel.buffer_auth_event(
             event="user_submitted_phone",
             flow_id=flow_id,
             method="phone",
             branch="phone_code",
         )
-        tel.send_auth_event(
+        tel.buffer_auth_event(
             event="code_requested",
             flow_id=flow_id,
             method="phone",
             branch="phone_code",
         )
-        tel.send_auth_event(
+        tel.buffer_auth_event(
             event="user_submitted_code",
             flow_id=flow_id,
             method="phone",
@@ -108,17 +108,17 @@ class TestSendAuthEvent:
         )
         assert len(tel._auth_buffers[flow_id]) == 3
 
-    def test_send_auth_event_different_flows_separate(self, tel):
+    def test_buffer_auth_event_different_flows_separate(self, tel):
         """Different flow_ids have separate buffers."""
         flow_a = str(uuid.uuid4())
         flow_b = str(uuid.uuid4())
-        tel.send_auth_event(
+        tel.buffer_auth_event(
             event="user_submitted_phone",
             flow_id=flow_a,
             method="phone",
             branch="phone_code",
         )
-        tel.send_auth_event(
+        tel.buffer_auth_event(
             event="qr_session_created",
             flow_id=flow_b,
             method="qr",
@@ -129,10 +129,10 @@ class TestSendAuthEvent:
         assert tel._auth_buffers[flow_a][0]["event"] == "user_submitted_phone"
         assert tel._auth_buffers[flow_b][0]["event"] == "qr_session_created"
 
-    def test_send_auth_event_carries_metadata(self, tel):
+    def test_buffer_auth_event_carries_metadata(self, tel):
         """Each event carries method, branch, and error fields."""
         flow_id = str(uuid.uuid4())
-        tel.send_auth_event(
+        tel.buffer_auth_event(
             event="code_validated",
             flow_id=flow_id,
             method="phone",
@@ -144,10 +144,10 @@ class TestSendAuthEvent:
         assert event["branch"] == "phone_code"
         assert event["error"] == "invalid_code"
 
-    def test_send_auth_event_no_error_field_when_none(self, tel):
+    def test_buffer_auth_event_no_error_field_when_none(self, tel):
         """Events without error don't have an error key."""
         flow_id = str(uuid.uuid4())
-        tel.send_auth_event(
+        tel.buffer_auth_event(
             event="session_established",
             flow_id=flow_id,
             method="phone",
@@ -156,11 +156,11 @@ class TestSendAuthEvent:
         event = tel._auth_buffers[flow_id][0]
         assert "error" not in event
 
-    def test_send_auth_event_disabled_by_do_not_track(self, tel):
+    def test_buffer_auth_event_disabled_by_do_not_track(self, tel):
         """DO_NOT_TRACK=1 prevents event accumulation."""
         os.environ["DO_NOT_TRACK"] = "1"
         flow_id = str(uuid.uuid4())
-        tel.send_auth_event(
+        tel.buffer_auth_event(
             event="user_submitted_phone",
             flow_id=flow_id,
             method="phone",
@@ -168,10 +168,10 @@ class TestSendAuthEvent:
         )
         assert flow_id not in tel._auth_buffers
 
-    def test_send_auth_event_has_timestamp(self, tel):
-        """Each event has a ts field (unix timestamp as float)."""
+    def test_buffer_auth_event_has_timestamp(self, tel):
+        """Each event has a ts field (unix timestamp as int seconds)."""
         flow_id = str(uuid.uuid4())
-        tel.send_auth_event(
+        tel.buffer_auth_event(
             event="user_submitted_phone",
             flow_id=flow_id,
             method="phone",
@@ -179,28 +179,26 @@ class TestSendAuthEvent:
         )
         event = tel._auth_buffers[flow_id][0]
         assert "ts" in event
-        assert isinstance(event["ts"], float)
+        assert isinstance(event["ts"], int)
         assert event["ts"] > 0
 
-    def test_send_auth_event_subsecond_precision(self, tel, monkeypatch):
-        """Events within the same second have distinct timestamps.
-
-        QR auth flows can complete in < 1 second.  If timestamps are
-        truncated to integer seconds, the Grafana duration query yields 0.
-        """
+    def test_buffer_auth_event_integer_timestamps_within_same_second(
+        self, tel, monkeypatch
+    ):
+        """Events in the same second share integer ts (collector contract)."""
         import time
 
         times = iter([1000.123, 1000.456])
         monkeypatch.setattr(time, "time", lambda: next(times))
 
         flow_id = str(uuid.uuid4())
-        tel.send_auth_event(
+        tel.buffer_auth_event(
             event="qr_session_created",
             flow_id=flow_id,
             method="qr",
             branch="qr_scan",
         )
-        tel.send_auth_event(
+        tel.buffer_auth_event(
             event="session_established",
             flow_id=flow_id,
             method="qr",
@@ -209,8 +207,9 @@ class TestSendAuthEvent:
 
         ts1 = tel._auth_buffers[flow_id][0]["ts"]
         ts2 = tel._auth_buffers[flow_id][1]["ts"]
-        assert ts1 != ts2, "Events within the same second must have distinct timestamps"
-        assert ts2 - ts1 == pytest.approx(0.333)
+        assert isinstance(ts1, int)
+        assert isinstance(ts2, int)
+        assert ts1 == ts2 == 1000
 
 
 # ───────────────────────────── flush_auth_events ─────────────────────────
@@ -229,13 +228,13 @@ class TestFlushAuthEvents:
         monkeypatch.setattr(tel, "_post_json", mock_post)
 
         flow_id = str(uuid.uuid4())
-        tel.send_auth_event(
+        tel.buffer_auth_event(
             event="user_submitted_phone",
             flow_id=flow_id,
             method="phone",
             branch="phone_code",
         )
-        tel.send_auth_event(
+        tel.buffer_auth_event(
             event="code_requested",
             flow_id=flow_id,
             method="phone",
@@ -254,7 +253,7 @@ class TestFlushAuthEvents:
         monkeypatch.setattr(tel, "_post_json", lambda *_: None)
 
         flow_id = str(uuid.uuid4())
-        tel.send_auth_event(
+        tel.buffer_auth_event(
             event="user_submitted_phone",
             flow_id=flow_id,
             method="phone",
@@ -277,7 +276,7 @@ class TestFlushAuthEvents:
         monkeypatch.setattr(tel, "_post_json", lambda p, _: captured.append(p))
 
         flow_id = str(uuid.uuid4())
-        tel.send_auth_event(
+        tel.buffer_auth_event(
             event="session_established",
             flow_id=flow_id,
             method="qr",
@@ -300,7 +299,7 @@ class TestFlushAuthEvents:
         monkeypatch.setattr(tel, "_post_json", fail)
 
         flow_id = str(uuid.uuid4())
-        tel.send_auth_event(
+        tel.buffer_auth_event(
             event="user_submitted_phone",
             flow_id=flow_id,
             method="phone",
@@ -317,7 +316,7 @@ class TestFlushAuthEvents:
         monkeypatch.setattr(tel, "_post_json", lambda p, _: captured.append(p))
 
         flow_id = str(uuid.uuid4())
-        tel.send_auth_event(
+        tel.buffer_auth_event(
             event="code_validated",
             flow_id=flow_id,
             method="phone",
@@ -333,3 +332,32 @@ class TestFlushAuthEvents:
         assert event["method"] == "phone"
         assert event["branch"] == "phone_code"
         assert event["error"] == "invalid_code"
+
+    def test_flush_payload_validates_in_collector(
+        self, tel, monkeypatch, _sync_threads
+    ):
+        """Flushed auth payload must pass collector AuthPayload validation."""
+        import sys
+        from pathlib import Path
+
+        collector_root = Path(__file__).resolve().parents[1] / "collector"
+        if str(collector_root) not in sys.path:
+            sys.path.insert(0, str(collector_root))
+        from app.auth_models import AuthPayload
+
+        captured = []
+        monkeypatch.setattr(tel, "_post_json", lambda p, _: captured.append(p))
+
+        flow_id = str(uuid.uuid4())
+        tel.buffer_auth_event(
+            event="session_established",
+            flow_id=flow_id,
+            method="qr",
+            branch="qr_scan",
+        )
+        tel.flush_auth_events(flow_id)
+
+        payload = AuthPayload.from_dict(captured[0])
+        assert payload.type == "auth"
+        assert isinstance(payload.ts, int)
+        assert isinstance(payload.events[0]["ts"], int)

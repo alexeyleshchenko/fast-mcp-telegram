@@ -32,7 +32,8 @@ from src.server_components.session_token_validation import (
     session_file_path,
     validate_session_token,
 )
-from src.telemetry import flush_auth_events, send_auth_event
+from src.auth_errors import categorize_auth_error
+from src.telemetry import flush_auth_events, buffer_auth_event
 from src.utils.logging_utils import mask_phone_number
 from src.utils.mcp_config import generate_mcp_config_json
 from src.utils.proxy import build_mtproto_client_args
@@ -476,39 +477,6 @@ async def _complete_authentication(request: Request, state: dict[str, Any]):
     return await setup_generate(request)
 
 
-def _categorize_web_error(exc: BaseException) -> str:
-    """Map Telethon/runtime exceptions to ADR 0008 error categories."""
-    from telethon.errors import (
-        FloodWaitError,
-        PasswordHashInvalidError,
-        PhoneCodeExpiredError,
-        PhoneCodeInvalidError,
-        PhoneNumberBannedError,
-        PhoneNumberInvalidError,
-        PhoneNumberUnoccupiedError,
-    )
-
-    if isinstance(exc, PasswordHashInvalidError):
-        return "2fa_wrong_password"
-    if isinstance(exc, PhoneCodeInvalidError):
-        return "invalid_code"
-    if isinstance(exc, PhoneCodeExpiredError):
-        return "code_expired"
-    if isinstance(exc, FloodWaitError):
-        return "flood_wait"
-    if isinstance(exc, PhoneNumberBannedError):
-        return "phone_banned"
-    if isinstance(exc, PhoneNumberInvalidError):
-        return "phone_invalid"
-    if isinstance(exc, PhoneNumberUnoccupiedError):
-        return "phone_unoccupied"
-    if isinstance(exc, ConnectionError):
-        return "connect_failed"
-    if isinstance(exc, (TimeoutError, OSError)):
-        return "timeout"
-    return "unknown"
-
-
 def register_web_setup_routes(mcp_app):
     @mcp_app.custom_route("/setup", methods=["GET"])
     async def setup_get(request):
@@ -574,13 +542,13 @@ def register_web_setup_routes(mcp_app):
 
         # Auth telemetry: user submitted phone, code requested
         fid = _setup_sessions[setup_id]["flow_id"]
-        send_auth_event(
+        buffer_auth_event(
             event="user_submitted_phone",
             flow_id=fid,
             method="phone",
             branch="phone_code",
         )
-        send_auth_event(
+        buffer_auth_event(
             event="code_requested", flow_id=fid, method="phone", branch="phone_code"
         )
 
@@ -613,7 +581,7 @@ def register_web_setup_routes(mcp_app):
         is_reauth = state.get("reauthorizing", False)
         method = "reauth" if is_reauth else "phone"
         branch = "reauth_code" if is_reauth else "phone_code"
-        send_auth_event(
+        buffer_auth_event(
             event="user_submitted_code", flow_id=fid, method=method, branch=branch
         )
 
@@ -621,16 +589,16 @@ def register_web_setup_routes(mcp_app):
             await client.sign_in(phone=phone, code=code)
             state["authorized"] = True
             logger.info("Phone %s verified successfully", masked_phone)
-            send_auth_event(
+            buffer_auth_event(
                 event="code_validated", flow_id=fid, method=method, branch=branch
             )
-            send_auth_event(
+            buffer_auth_event(
                 event="session_established", flow_id=fid, method=method, branch=branch
             )
             flush_auth_events(fid)
             return await _complete_authentication(request, state)
         except SessionPasswordNeededError:
-            send_auth_event(
+            buffer_auth_event(
                 event="code_validated", flow_id=fid, method=method, branch=branch
             )
             hint = ""
@@ -642,12 +610,12 @@ def register_web_setup_routes(mcp_app):
             return _fragment(request, "fragments/2fa_form.html", ctx)
         except Exception as e:
             logger.warning("Verification failed for phone %s: %s", masked_phone, e)
-            send_auth_event(
+            buffer_auth_event(
                 event="code_validated",
                 flow_id=fid,
                 method=method,
                 branch=branch,
-                error=_categorize_web_error(e),
+                error=categorize_auth_error(e),
             )
             flush_auth_events(fid)
             return _fragment(
@@ -682,23 +650,23 @@ def register_web_setup_routes(mcp_app):
         is_reauth = state.get("reauthorizing", False)
         method = "reauth" if is_reauth else "phone"
         branch = "reauth_2fa" if is_reauth else "phone_2fa"
-        send_auth_event(
+        buffer_auth_event(
             event="user_submitted_password", flow_id=fid, method=method, branch=branch
         )
 
         try:
             await client.sign_in(password=password)
             state["authorized"] = True
-            send_auth_event(
+            buffer_auth_event(
                 event="password_validated", flow_id=fid, method=method, branch=branch
             )
-            send_auth_event(
+            buffer_auth_event(
                 event="session_established", flow_id=fid, method=method, branch=branch
             )
             flush_auth_events(fid)
             return await _complete_authentication(request, state)
         except PasswordHashInvalidError:
-            send_auth_event(
+            buffer_auth_event(
                 event="password_validated",
                 flow_id=fid,
                 method=method,
@@ -718,12 +686,12 @@ def register_web_setup_routes(mcp_app):
             )
         except Exception as e:
             logger.warning("2FA failed: %s", e)
-            send_auth_event(
+            buffer_auth_event(
                 event="password_validated",
                 flow_id=fid,
                 method=method,
                 branch=branch,
-                error=_categorize_web_error(e),
+                error=categorize_auth_error(e),
             )
             flush_auth_events(fid)
             hint = state.get("hint") or ""
@@ -829,7 +797,7 @@ def register_web_setup_routes(mcp_app):
 
             # Auth telemetry: reauth flow initiated
             fid = _setup_sessions[setup_id]["flow_id"]
-            send_auth_event(
+            buffer_auth_event(
                 event="reauth_initiated",
                 flow_id=fid,
                 method="reauth",
@@ -910,13 +878,13 @@ def register_web_setup_routes(mcp_app):
 
         # Auth telemetry: user submitted phone for reauth, code requested
         fid = state.get("flow_id", "")
-        send_auth_event(
+        buffer_auth_event(
             event="user_submitted_phone",
             flow_id=fid,
             method="reauth",
             branch="reauth_code",
         )
-        send_auth_event(
+        buffer_auth_event(
             event="code_requested", flow_id=fid, method="reauth", branch="reauth_code"
         )
 
@@ -1056,7 +1024,7 @@ def register_web_setup_routes(mcp_app):
 
         # Auth telemetry: QR session created
         fid = _setup_sessions[setup_id]["flow_id"]
-        send_auth_event(
+        buffer_auth_event(
             event="qr_session_created", flow_id=fid, method="qr", branch="qr_scan"
         )
 
@@ -1116,20 +1084,20 @@ def register_web_setup_routes(mcp_app):
 
         if status == "completed":
             state["authorized"] = True
-            send_auth_event(
+            buffer_auth_event(
                 event="user_scanned_qr", flow_id=fid, method="qr", branch="qr_scan"
             )
-            send_auth_event(
+            buffer_auth_event(
                 event="qr_login_confirmed", flow_id=fid, method="qr", branch="qr_scan"
             )
-            send_auth_event(
+            buffer_auth_event(
                 event="session_established", flow_id=fid, method="qr", branch="qr_scan"
             )
             flush_auth_events(fid)
             return await _complete_qr_login(request, state, qr_session_id, setup_id)
 
         if status == "expired":
-            send_auth_event(
+            buffer_auth_event(
                 event="qr_expired", flow_id=fid, method="qr", branch="qr_scan"
             )
             flush_auth_events(fid)
@@ -1140,7 +1108,7 @@ def register_web_setup_routes(mcp_app):
             )
 
         if status == "2fa_required":
-            send_auth_event(
+            buffer_auth_event(
                 event="user_scanned_qr", flow_id=fid, method="qr", branch="qr_2fa"
             )
             hint = qr_mgr.get_password_hint(qr_session_id)
@@ -1195,7 +1163,7 @@ def register_web_setup_routes(mcp_app):
         hint = qr_mgr.get_password_hint(qr_session_id)
 
         fid = state.get("flow_id", "")
-        send_auth_event(
+        buffer_auth_event(
             event="user_submitted_password", flow_id=fid, method="qr", branch="qr_2fa"
         )
 
@@ -1203,15 +1171,15 @@ def register_web_setup_routes(mcp_app):
             await client.sign_in(password=password)
             state["authorized"] = True
             logger.info("QR login 2FA completed for session %s", setup_id)
-            send_auth_event(
+            buffer_auth_event(
                 event="password_validated", flow_id=fid, method="qr", branch="qr_2fa"
             )
-            send_auth_event(
+            buffer_auth_event(
                 event="session_established", flow_id=fid, method="qr", branch="qr_2fa"
             )
             flush_auth_events(fid)
         except PasswordHashInvalidError:
-            send_auth_event(
+            buffer_auth_event(
                 event="password_validated",
                 flow_id=fid,
                 method="qr",
@@ -1229,12 +1197,12 @@ def register_web_setup_routes(mcp_app):
             )
         except Exception as e:
             logger.warning("QR 2FA failed for session %s: %s", setup_id, e)
-            send_auth_event(
+            buffer_auth_event(
                 event="password_validated",
                 flow_id=fid,
                 method="qr",
                 branch="qr_2fa",
-                error=_categorize_web_error(e),
+                error=categorize_auth_error(e),
             )
             flush_auth_events(fid)
             return _fragment(
