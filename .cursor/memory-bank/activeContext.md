@@ -1,6 +1,6 @@
 ## Current Work Focus
 
-**find_chats auth error surfacing (2026-07-09):** `_find_chats_combined` no longer returns `{"chats": []}` when both parallel branches fail with `SessionNotAuthorizedError` / `TelegramTransportError`; uses `log_connection_error_response` (`code: -32002`, `AUTHENTICATE_SESSION`). Graceful degrade when one branch succeeds unchanged. Three regression tests in `tests/test_contacts_date_filtering.py`. Uncommitted on `master`.
+**find_chats / search auth error surfacing (2026-07-09):** Combined-path fix deployed (`0.42.0-2-g51a1d71`). Follow-up in working tree: multi-term `_gather_term_results`, combined prefers auth over misleading no-contacts errors, `_gather_global_batch` + generator paths propagate session/transport failures. Uncommitted on `master`.
 
 ---
 

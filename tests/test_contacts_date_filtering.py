@@ -10,6 +10,7 @@ from src.tools.chat_discovery.date_helpers import _dialog_in_date_range
 from src.tools.chat_discovery.find_chats import _find_chats_global, find_chats_impl
 from src.utils.datetime_parse import parse_iso_datetime_utc
 from src.utils.entity import build_dialog_entity_dict, entity_matches_dialog_query
+from src.utils.error_handling import log_and_build_error
 from tests.conftest import MockChat, MockDialog, MockUser, make_user
 
 # ============== Helper Function Tests ==============
@@ -568,6 +569,53 @@ async def test_find_chats_combined_both_empty_returns_empty_chats():
         result = await find_chats_impl(query="telegram", limit=3)
 
     assert result == {"chats": []}
+
+
+@pytest.mark.asyncio
+async def test_find_chats_global_multi_term_auth_fail_returns_session_error():
+    """Multi-term search must not masquerade auth failure as no contacts found."""
+    auth_error = SessionNotAuthorizedError("f9NdKOLR...")
+
+    with patch(
+        "src.tools.chat_discovery.find_chats._search_contacts_as_list",
+        new_callable=AsyncMock,
+        side_effect=auth_error,
+    ):
+        result = await find_chats_impl(query="a,b", limit=3, chat_type="private")
+
+    assert result["ok"] is False
+    assert result["code"] == -32002
+    assert result["action"] == "AUTHENTICATE_SESSION"
+
+
+@pytest.mark.asyncio
+async def test_find_chats_combined_prefers_auth_error_over_no_contacts_dict():
+    """Combined path should prefer AUTHENTICATE_SESSION over misleading no-contacts errors."""
+    auth_error = SessionNotAuthorizedError("f9NdKOLR...")
+    no_contacts_error = log_and_build_error(
+        operation="search_contacts_multi",
+        error_message="No contacts found matching query 'a,b'",
+        params={"query": "a,b"},
+        exception=ValueError("No contacts found"),
+    )
+
+    with (
+        patch(
+            "src.tools.chat_discovery.find_chats._find_chats_global",
+            new_callable=AsyncMock,
+            return_value=no_contacts_error,
+        ),
+        patch(
+            "src.tools.chat_discovery.find_chats._find_chats_by_dialogs",
+            new_callable=AsyncMock,
+            side_effect=auth_error,
+        ),
+    ):
+        result = await find_chats_impl(query="a,b", limit=3)
+
+    assert result["ok"] is False
+    assert result["code"] == -32002
+    assert result["action"] == "AUTHENTICATE_SESSION"
 
 
 @pytest.mark.asyncio

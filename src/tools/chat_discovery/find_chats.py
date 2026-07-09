@@ -8,7 +8,10 @@ from typing import Any
 from src.client.connection import get_connected_client
 from src.utils.datetime_parse import parse_iso_datetime_utc
 from src.utils.entity import get_dialog_filters
-from src.utils.error_handling import log_and_build_error, log_connection_error_response
+from src.utils.error_handling import (
+    connection_error_response_from_gathered,
+    log_and_build_error,
+)
 
 from .constants import AVAILABLE_FILTERS_MAX_SHOW
 from .contact_search import _search_contacts_as_list
@@ -275,6 +278,10 @@ async def _find_chats_combined(
         term_results.append(dialog_chats)
 
     if not term_results:
+        if conn_error := connection_error_response_from_gathered(
+            (user_result, dialog_result), "find_chats", params
+        ):
+            return conn_error
         if error_result := next(
             (
                 r
@@ -284,13 +291,6 @@ async def _find_chats_combined(
             None,
         ):
             return error_result
-        for gather_result in (user_result, dialog_result):
-            if isinstance(gather_result, BaseException) and (
-                conn_error := log_connection_error_response(
-                    "find_chats", params, gather_result
-                )
-            ):
-                return conn_error
         return {"chats": []}
 
     return {"chats": _merge_results_round_robin(term_results, limit)}
@@ -302,14 +302,25 @@ async def _gather_term_results(
     chat_type: str | None,
     public: bool | None,
     max_concurrent: int | None = _DEFAULT_MAX_CONCURRENT,
-) -> tuple[list[list[dict[str, Any]]] | None, tuple[str, ...]]:
+) -> tuple[
+    list[list[dict[str, Any]]] | None,
+    tuple[str, ...],
+    dict[str, Any] | None,
+]:
     """Execute all term searches with optional concurrency limit.
 
     Uses asyncio.Semaphore when max_concurrent is set to throttle concurrent requests.
     Falls back to bare asyncio.gather when max_concurrent is None (original behavior).
 
-    Returns (term_results, errors) where term_results is None if no term succeeded.
+    Returns (term_results, errors, connection_error) where term_results is None if no
+    term succeeded and connection_error is set when all failures were session/transport.
     """
+    gather_params = {
+        "terms": terms,
+        "limit": limit,
+        "chat_type": chat_type,
+        "public": public,
+    }
     semaphore = asyncio.Semaphore(max_concurrent) if max_concurrent else None
 
     async def _run_with_limits(term: str) -> list[dict[str, Any]] | dict[str, Any]:
@@ -340,7 +351,13 @@ async def _gather_term_results(
             continue
         term_results.append(result)
 
-    return (term_results, tuple(errors)) if term_results else (None, tuple(errors))
+    if term_results:
+        return term_results, tuple(errors), None
+
+    conn_error = connection_error_response_from_gathered(
+        results, "find_chats", gather_params
+    )
+    return None, tuple(errors), conn_error
 
 
 def _merge_results_round_robin(
@@ -383,10 +400,12 @@ async def _find_chats_global_multi_term(
     (avoids earlier terms dominating the output).
     Deduplicates by entity ID.
     """
-    term_results, failed_terms = await _gather_term_results(
+    term_results, failed_terms, conn_error = await _gather_term_results(
         terms, limit, chat_type, public, max_concurrent
     )
     if term_results is None:
+        if conn_error:
+            return conn_error
         error_detail = (
             "; ".join(failed_terms) if failed_terms else "no results from any term"
         )

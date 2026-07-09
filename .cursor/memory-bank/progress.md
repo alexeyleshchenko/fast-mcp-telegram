@@ -1,5 +1,6 @@
 ### 2026-07-09
-- **find_chats combined-path auth errors:** `_find_chats_combined` surfaced `SessionNotAuthorizedError` / `TelegramTransportError` via `log_connection_error_response` instead of misleading `{"chats": []}` when both parallel branches fail. Regression tests in `tests/test_contacts_date_filtering.py`.
+- **find_chats combined-path auth errors:** `_find_chats_combined` surfaced `SessionNotAuthorizedError` / `TelegramTransportError` via `log_connection_error_response` instead of misleading `{"chats": []}` when both parallel branches fail. Deployed `0.42.0-2-g51a1d71`.
+- **Auth error surfacing follow-up (uncommitted):** `connection_error_response_from_gathered` helper; multi-term gather + combined comma-query prefer `-32002`; global message search batch/generator paths re-raise connection errors.
 
 ### 2026-06-03
 - **v0.28.2 — GetPeerDialogsRequest dialog.date fix:** Entities from `iter_dialogs` with stale `access_hash` caused GetPeerDialogsRequest to hang ~30s per chunk. Fixed by storing `dialog.date` directly during flags iteration, skipping GetPeerDialogsRequest for ~200 flags-matched entities. Query time from ~39s to ~6.9s.

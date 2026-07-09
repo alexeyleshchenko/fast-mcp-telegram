@@ -16,7 +16,11 @@ from src.utils.entity import (
     _matches_public_filter,
     get_entity_by_id,
 )
-from src.utils.error_handling import log_and_build_error, log_connection_error_response
+from src.utils.error_handling import (
+    find_connection_exception,
+    log_and_build_error,
+    log_connection_error_response,
+)
 from src.utils.helpers import _append_dedup_until_limit
 from src.utils.message_format import (
     response_attachment_warning,
@@ -52,6 +56,8 @@ async def _execute_parallel_searches_generators(
             except StopAsyncIteration:
                 continue
             except Exception as e:
+                if find_connection_exception(e):
+                    raise
                 logger.warning(f"Error in search generator {i}: {e}")
                 continue
 
@@ -124,6 +130,13 @@ async def _gather_global_batch(
         # Update offset_id for pagination
         terms[term_idx]["offset_id"] = response.messages[-1].id  # type: ignore[union-attr]
         results.append((term_idx, response))
+
+    if not results and responses:
+        for response in responses:
+            if isinstance(response, BaseException) and (
+                conn_exc := find_connection_exception(response)
+            ):
+                raise conn_exc
 
     return results
 

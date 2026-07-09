@@ -16,7 +16,11 @@ from src.client.connection import (
     TelegramTransportError,
 )
 from src.server_components.errors import with_error_handling
-from src.utils.error_handling import ErrorAction, log_and_build_error
+from src.utils.error_handling import (
+    ErrorAction,
+    connection_error_response_from_gathered,
+    log_and_build_error,
+)
 
 
 @pytest.fixture
@@ -206,3 +210,17 @@ async def test_is_error_response_falsy_non_false():
     # Explicit False IS an error
     assert is_error_response({"ok": False})
     assert not is_error_response({})  # no ok key
+
+
+def test_connection_error_response_from_gathered_returns_first_auth_error():
+    auth_error = SessionNotAuthorizedError("token")
+    result = connection_error_response_from_gathered(
+        (ValueError("other"), auth_error),
+        "find_chats",
+        {"query": "x"},
+    )
+
+    assert result is not None
+    assert result["ok"] is False
+    assert result["code"] == -32002
+    assert result["action"] == ErrorAction.AUTHENTICATE_SESSION.name

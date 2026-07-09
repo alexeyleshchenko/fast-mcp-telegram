@@ -268,6 +268,20 @@ def log_connection_error_response(
     )
 
 
+def connection_error_response_from_gathered(
+    gathered: tuple[Any, ...] | list[Any],
+    operation: str,
+    params: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Return the first session/transport error dict from asyncio.gather results."""
+    for item in gathered:
+        if isinstance(item, BaseException) and (
+            conn := log_connection_error_response(operation, params, item)
+        ):
+            return conn
+    return None
+
+
 def handle_tool_error(
     result: Any,
     operation: str,
