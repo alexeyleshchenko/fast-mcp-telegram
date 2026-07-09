@@ -1,13 +1,6 @@
 ## Current Work Focus
 
-**Review-fix cycles (2026-07-09):** Branch `fix/review-cycles` — parallel review findings addressed through two fix waves.
-
-- **Cycle 1 (correctness):** Auth `ts` int contract + collector float coercion; MTProto int coercion scoped to `annotation is int`; `self`/`me` alias; context enrichment budget skip + log demotion; ADR 0012 test coverage.
-- **Cycle 2 (structure/docs):** `context_enrichment.py` extract; shared `auth_errors.categorize_auth_error`; operator docs (empty `note`, attachments, HOST, deploy.sh); ADR 0011/0012 accepted; telemetry trace sanitization; `.env.remote` gitignored.
-- **Re-review verdict:** nitpicks only (uncommitted new modules must be included when committing).
-- **Clean breaks (2026-07-09):** `buffer_auth_event`, `include_replies`, public `extract_topic_metadata` / `parse_telegram_url`, `mtproto_tl.py` split, ADR 0011 review notes → `docs/research/`.
-- **`message_format` package split (2026-07-09):** `src/utils/message_format.py` → `src/utils/message_format/` (`__init__.py`, `core.py`, `attachments.py`, `transcription.py`) in working tree.
-- **Next:** commit branch when ready.
+**find_chats auth error surfacing (2026-07-09):** `_find_chats_combined` no longer returns `{"chats": []}` when both parallel branches fail with `SessionNotAuthorizedError` / `TelegramTransportError`; uses `log_connection_error_response` (`code: -32002`, `AUTHENTICATE_SESSION`). Graceful degrade when one branch succeeds unchanged. Three regression tests in `tests/test_contacts_date_filtering.py`. Uncommitted on `master`.
 
 ---
 

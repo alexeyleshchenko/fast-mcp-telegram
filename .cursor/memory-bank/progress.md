@@ -1,3 +1,6 @@
+### 2026-07-09
+- **find_chats combined-path auth errors:** `_find_chats_combined` surfaced `SessionNotAuthorizedError` / `TelegramTransportError` via `log_connection_error_response` instead of misleading `{"chats": []}` when both parallel branches fail. Regression tests in `tests/test_contacts_date_filtering.py`.
+
 ### 2026-06-03
 - **v0.28.2 — GetPeerDialogsRequest dialog.date fix:** Entities from `iter_dialogs` with stale `access_hash` caused GetPeerDialogsRequest to hang ~30s per chunk. Fixed by storing `dialog.date` directly during flags iteration, skipping GetPeerDialogsRequest for ~200 flags-matched entities. Query time from ~39s to ~6.9s.
 - **Debugging findings:** `asyncio.wait_for` on Telethon calls corrupts MTProto (msg_id desync). Batch `get_entity([71])` triggers FLOOD_WAIT_178. Cross-DC delays on 8/71 users (41-42s, unfixable client-side).

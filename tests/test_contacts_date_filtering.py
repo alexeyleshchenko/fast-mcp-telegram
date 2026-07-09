@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from src.client.connection import SessionNotAuthorizedError
 from src.tools.chat_discovery.date_helpers import _dialog_in_date_range
 from src.tools.chat_discovery.find_chats import _find_chats_global, find_chats_impl
 from src.utils.datetime_parse import parse_iso_datetime_utc
@@ -500,6 +501,73 @@ async def test_find_chats_impl_without_date_filters_uses_global():
         mock_search.assert_called_once()
         assert "chats" in result
         assert len(result["chats"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_find_chats_combined_both_auth_fail_returns_session_error():
+    """Combined path must not return empty chats when both branches are unauthorized."""
+    auth_error = SessionNotAuthorizedError("f9NdKOLR...")
+
+    with (
+        patch(
+            "src.tools.chat_discovery.find_chats._find_chats_global",
+            new_callable=AsyncMock,
+            side_effect=auth_error,
+        ),
+        patch(
+            "src.tools.chat_discovery.find_chats._find_chats_by_dialogs",
+            new_callable=AsyncMock,
+            side_effect=auth_error,
+        ),
+    ):
+        result = await find_chats_impl(query="telegram", limit=3)
+
+    assert result["ok"] is False
+    assert result["code"] == -32002
+    assert result["action"] == "AUTHENTICATE_SESSION"
+    assert "Session not authorized" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_find_chats_combined_one_auth_fail_degrades_to_other_branch():
+    """Combined path keeps partial results when only one branch fails."""
+    auth_error = SessionNotAuthorizedError("f9NdKOLR...")
+
+    with (
+        patch(
+            "src.tools.chat_discovery.find_chats._find_chats_global",
+            new_callable=AsyncMock,
+            side_effect=auth_error,
+        ),
+        patch(
+            "src.tools.chat_discovery.find_chats._find_chats_by_dialogs",
+            new_callable=AsyncMock,
+            return_value={"chats": [{"id": 1, "title": "OC Dev"}]},
+        ),
+    ):
+        result = await find_chats_impl(query="OC Dev", limit=3)
+
+    assert result == {"chats": [{"id": 1, "title": "OC Dev"}]}
+
+
+@pytest.mark.asyncio
+async def test_find_chats_combined_both_empty_returns_empty_chats():
+    """Combined path still returns empty chats when both branches succeed with no matches."""
+    with (
+        patch(
+            "src.tools.chat_discovery.find_chats._find_chats_global",
+            new_callable=AsyncMock,
+            return_value={"chats": []},
+        ),
+        patch(
+            "src.tools.chat_discovery.find_chats._find_chats_by_dialogs",
+            new_callable=AsyncMock,
+            return_value={"chats": []},
+        ),
+    ):
+        result = await find_chats_impl(query="telegram", limit=3)
+
+    assert result == {"chats": []}
 
 
 @pytest.mark.asyncio

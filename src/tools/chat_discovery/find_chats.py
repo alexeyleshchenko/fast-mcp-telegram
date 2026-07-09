@@ -8,7 +8,7 @@ from typing import Any
 from src.client.connection import get_connected_client
 from src.utils.datetime_parse import parse_iso_datetime_utc
 from src.utils.entity import get_dialog_filters
-from src.utils.error_handling import log_and_build_error
+from src.utils.error_handling import log_and_build_error, log_connection_error_response
 
 from .constants import AVAILABLE_FILTERS_MAX_SHOW
 from .contact_search import _search_contacts_as_list
@@ -284,6 +284,13 @@ async def _find_chats_combined(
             None,
         ):
             return error_result
+        for gather_result in (user_result, dialog_result):
+            if isinstance(gather_result, BaseException) and (
+                conn_error := log_connection_error_response(
+                    "find_chats", params, gather_result
+                )
+            ):
+                return conn_error
         return {"chats": []}
 
     return {"chats": _merge_results_round_robin(term_results, limit)}
