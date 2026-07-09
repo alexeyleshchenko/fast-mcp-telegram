@@ -22,13 +22,17 @@ echo "=== Deploy ${VERSION} → ${REMOTE_HOST} ==="
 
 # ------- 1. Sync source to remote -------
 echo "--- Syncing source ---"
-rsync -avz --delete --mkpath \
+# Ensure remote dir exists (macOS rsync lacks --mkpath)
+ssh "${REMOTE_HOST}" "mkdir -p ${REMOTE_DIR}"
+rsync -avz --delete \
     --exclude '.git' --exclude '.venv' --exclude '__pycache__' \
-    --exclude '*.pyc' --exclude '*.pyo' --exclude '.env' \
-    --exclude '.cursor' --exclude 'memory-bank' --exclude 'dist' \
-    --exclude '*.egg-info' --exclude '.mypy_cache' \
-    --exclude '.pytest_cache' --exclude 'htmlcov' \
-    --exclude 'logs' --exclude '*.session' \
+    --exclude '*.pyc' --exclude '*.pyo' \
+    --exclude '.env' --exclude '.env.local' --exclude '.env.remote' \
+    --exclude '.cursor' --exclude 'memory-bank' --exclude 'dist' --exclude 'build' \
+    --exclude '*.egg-info' --exclude '.mypy_cache' --exclude '.ruff_cache' \
+    --exclude '.pytest_cache' --exclude 'htmlcov' --exclude '.coverage*' \
+    --exclude 'logs' --exclude '*.session' --exclude 'sessions' \
+    --exclude '.mcpregistry_*' --exclude '.DS_Store' \
     ./ "${REMOTE_HOST}:${REMOTE_DIR}/"
 
 # ------- 2. Save current tag for rollback -------
@@ -44,7 +48,12 @@ echo "   Current: ${CURRENT_TAG:-none}  Target: ${VERSION}"
 echo "--- Building ${GHCR_IMAGE}:${VERSION} ---"
 ssh "${REMOTE_HOST}" "cd ${REMOTE_DIR} && docker build -t ${GHCR_IMAGE}:${VERSION} ."
 
-# ------- 4. Deploy via compose & wait for healthy ----
+# ------- 4. Replace any orphan container using the fixed name -------
+# Previous deploys may have started the container outside this compose project.
+echo "--- Replacing container ${CONTAINER_NAME} ---"
+ssh "${REMOTE_HOST}" "docker stop ${CONTAINER_NAME} >/dev/null 2>&1 || true; docker rm ${CONTAINER_NAME} >/dev/null 2>&1 || true"
+
+# ------- 5. Deploy via compose & wait for healthy ----
 echo "--- Deploying via compose ---"
 if ssh "${REMOTE_HOST}" "cd ${REMOTE_DIR} && IMAGE_TAG=${VERSION} docker compose up --wait --wait-timeout 90 ${SERVICE}"; then
     echo "✅ ${VERSION} deployed — healthy."
@@ -56,7 +65,9 @@ fi
 echo "❌ Healthcheck failed within 90s timeout."
 if [ -n "${CURRENT_TAG}" ]; then
     echo "   Rolling back to ${CURRENT_TAG}..."
-    if ssh "${REMOTE_HOST}" "cd ${REMOTE_DIR} && IMAGE_TAG=${CURRENT_TAG} docker compose up --wait --wait-timeout 60 ${SERVICE}"; then
+    ssh "${REMOTE_HOST}" "docker stop ${CONTAINER_NAME} >/dev/null 2>&1 || true; docker rm ${CONTAINER_NAME} >/dev/null 2>&1 || true"
+    # Prefer local image (may not exist on GHCR); compose pull is not required.
+    if ssh "${REMOTE_HOST}" "cd ${REMOTE_DIR} && IMAGE_TAG=${CURRENT_TAG} docker compose up --pull never --wait --wait-timeout 60 ${SERVICE}"; then
         echo "   Rolled back to ${CURRENT_TAG}."
     else
         echo "   Rollback also failed — check container logs."
