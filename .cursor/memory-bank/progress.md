@@ -1,4 +1,8 @@
+### 2026-07-12
+- **message_ids missing-id contract:** `_handle_ids_mode` promotes only `ok: false` operational errors; per-id stubs for missing/deleted ids (including `MessageEmpty`) stay under `{messages, has_more: false}`. `_get_messages_by_ids_batched` filters via `message_has_displayable_content`. `FromUser` Field + Tools-Reference document no display-name search. Tests: `tests/test_read_messages_by_ids_gaps.py`.
+
 ### 2026-07-09
+- **Web setup reauth QR:** Reauthorize path shows QR + phone chooser (matches Installation.md). `/setup/qr` reuses reauth `setup_id`; QR completion replaces session under existing token; success page hides token. `qr_expired.html` passes `setup_id` on regenerate.
 - **find_chats combined-path auth errors:** `_find_chats_combined` surfaced `SessionNotAuthorizedError` / `TelegramTransportError` via `log_connection_error_response` instead of misleading `{"chats": []}` when both parallel branches fail. Deployed `0.42.0-2-g51a1d71`.
 - **Auth error surfacing follow-up (uncommitted):** `connection_error_response_from_gathered` helper; multi-term gather + combined comma-query prefer `-32002`; global message search batch/generator paths re-raise connection errors.
 

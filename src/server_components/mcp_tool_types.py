@@ -208,8 +208,10 @@ FromUser = Annotated[
     Field(
         description=(
             "Only return messages from this sender. "
-            "Accepts: numeric user id, @username, phone (+…), 'me', 'self', t.me URL, -100 prefixed id. "
-            "Resolved via get_entity_by_id (same as chat_id). "
+            "Not a display-name or contact-name search — bare strings resolve like chat_id "
+            "via get_entity (usernames are case-insensitive and may match an unrelated channel). "
+            "Prefer @username, phone (+…), or numeric user id. "
+            "Also accepts 'me', 'self', t.me URL, -100 prefixed id. "
             "Uses Telegram's native from_id server-side filter (per-chat search only)."
         )
     ),

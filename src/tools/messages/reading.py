@@ -42,6 +42,13 @@ async def _build_message_link_mapping(
         return {}
 
 
+def _is_missing_telegram_message(msg) -> bool:
+    """True when Telethon returned no usable message for a requested id."""
+    if msg is None:
+        return True
+    return type(msg).__name__ == "MessageEmpty"
+
+
 def _find_message_by_id(messages: list, requested_id: int, idx: int):
     """Find message by ID in fetched messages list."""
     if idx < len(messages):
@@ -72,7 +79,7 @@ async def _build_message_results(
     for idx, requested_id in enumerate(message_ids):
         msg = _find_message_by_id(messages, requested_id, idx)
 
-        if not msg:
+        if _is_missing_telegram_message(msg):
             results.append(
                 {
                     "id": requested_id,

@@ -171,7 +171,7 @@ async def _handle_ids_mode(
     """Handle reading specific messages by IDs with unified output format."""
     messages_list = await read_messages_by_ids(chat_id, message_ids)
 
-    if len(messages_list) == 1 and "error" in messages_list[0]:
+    if len(messages_list) == 1 and messages_list[0].get("ok") is False:
         return messages_list[0]
 
     result: dict[str, Any] = {

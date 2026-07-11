@@ -224,7 +224,7 @@ get_messages(
   limit?: number = 50,           // Max results
   min_date?: string,             // ISO date filter (search, browse, and reply/forum-topic modes)
   max_date?: string,             // ISO date filter (search, browse, and reply/forum-topic modes)
-  from_user?: string,            // Sender filter: @username, phone, user id, t.me URL, 'me' (per-chat only)
+  from_user?: string,            // Sender filter — @username, phone, user id (not display-name search; per-chat only)
   context?: number = 0,          // Neighbor messages per side (1–10); 0=disabled. Requires chat_id.
   include_replies?: boolean = false,  // Fetch up to 5 direct replies per result (opt-in)
   auto_expand_batches?: number = 2,  // Extra batches for filtered searches
@@ -261,6 +261,10 @@ get_messages(
 - `thread_scope` of `full` or `direct` without `reply_to_id`
 - `message_ids` + `reply_to_id`: Cannot combine
 - `message_ids` + `query`: Cannot combine (specific IDs don't need search)
+
+**`message_ids` — missing or deleted IDs:** Each requested id appears in `messages` in request order. Found messages use the normal message shape (without `chat` when `chat_id` is set). Missing or deleted ids return a per-id stub: `{"id": <id>, "chat": {...}, "error": "Message not found or inaccessible"}`. Single-id and multi-id requests use the same envelope: `{"messages": [...], "has_more": false}`. Operational failures (chat not found, bad params) still return top-level `ok: false` errors. Search, browse, and reply/thread modes omit deleted id gaps silently (no stubs).
+
+**`from_user` — not a name search:** Resolves the sender like `chat_id` via `get_entity` (username, phone, numeric id, `me`, t.me URL). Does **not** search contacts or match display names — a bare string such as `Adolfo` may resolve to an unrelated `@username`. Prefer `@username`, phone, or numeric user id.
 
 **Response (unified format for all modes):**
 ```json

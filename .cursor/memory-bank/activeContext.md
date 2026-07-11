@@ -1,5 +1,13 @@
 ## Current Work Focus
 
+**message_ids missing-id contract (2026-07-12):** Explicit `message_ids` returns per-id stubs under `{messages, has_more: false}` (single = multi); operational `ok: false` still top-level. Internal batched id fetches omit deleted gaps silently. `FromUser` annotation documents no display-name search. Tests in `tests/test_read_messages_by_ids_gaps.py`.
+
+---
+
+**Web setup reauth QR (2026-07-09):** After token validation, reauthorize shows QR (recommended) + phone chooser. `/setup/qr` accepts `setup_id` for reauth and preserves the existing bearer token on completion. Success page no longer displays the token. Four regression tests in `tests/test_web_setup.py`.
+
+---
+
 **find_chats / search auth error surfacing (2026-07-09):** Combined-path fix deployed (`0.42.0-2-g51a1d71`). Follow-up in working tree: multi-term `_gather_term_results`, combined prefers auth over misleading no-contacts errors, `_gather_global_batch` + generator paths propagate session/transport failures. Uncommitted on `master`.
 
 ---
