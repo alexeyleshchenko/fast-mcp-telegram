@@ -81,6 +81,9 @@ SESSION_NOT_FOUND_MESSAGE = "Session not found. Please check your bearer token."
 REAUTH_COMPLETE_FAILED_MESSAGE = (
     "Failed to complete reauthorization. Please try again from setup."
 )
+REAUTH_SUCCESS_MESSAGE = (
+    "Session reauthorized successfully. Your existing token is still active."
+)
 
 # Project templates directory (resolved from this package)
 templates = Jinja2Templates(
@@ -348,6 +351,60 @@ def _get_qr_manager() -> QrLoginManager:
     return _qr_manager
 
 
+def _qr_auth_method(state: dict[str, Any]) -> str:
+    """Return telemetry method for QR flows (reauth vs new session)."""
+    return "reauth" if state.get("reauthorizing") else "qr"
+
+
+def _qr_image_base64(qr_url: str) -> str:
+    """Encode a Telegram QR login URL as a base64 PNG."""
+    qr = qrcode.QRCode(box_size=10, border=2)
+    qr.add_data(qr_url)
+    qr.make(fit=True)
+    img = qr.make_image()
+    buf = BytesIO()
+    img.save(buf, format="PNG")
+    return base64.b64encode(buf.getvalue()).decode()
+
+
+async def _start_qr_on_client(
+    request: Request,
+    *,
+    setup_id: str,
+    client: Any,
+    state: dict[str, Any],
+    reauthorizing: bool = False,
+) -> Any:
+    """Create a QR login session on an existing client and return the display fragment."""
+    qr_mgr = _get_qr_manager()
+    qr_session_id, qr_url = await qr_mgr.create_session(client)
+
+    if reauthorizing:
+        temp_path = state.get("temp_session_path")
+        if temp_path:
+            state["session_path"] = temp_path
+
+    state.update(qr_session_id=qr_session_id, authorized=False)
+
+    fid = state.get("flow_id", "")
+    buffer_auth_event(
+        event="qr_session_created",
+        flow_id=fid,
+        method=_qr_auth_method(state),
+        branch="qr_scan",
+    )
+
+    return _fragment(
+        request,
+        "fragments/qr_display.html",
+        {
+            "setup_id": setup_id,
+            "qr_image": _qr_image_base64(qr_url),
+            "reauthorizing": reauthorizing,
+        },
+    )
+
+
 async def _complete_qr_login(
     request: Request,
     state: dict[str, Any],
@@ -361,6 +418,12 @@ async def _complete_qr_login(
         authorized_client: Optional pre-authorized Telethon client (for 2FA flow).
             If None, the client is fetched from the QR manager (direct scan flow).
     """
+    if state.get("reauthorizing"):
+        if authorized_client is not None:
+            state["client"] = authorized_client
+        state["authorized"] = True
+        return await _complete_reauth_from_state(request, setup_id, state)
+
     qr_mgr = _get_qr_manager()
     if authorized_client is None:
         authorized_client = qr_mgr.get_client(qr_session_id)
@@ -379,15 +442,10 @@ async def _complete_qr_login(
     return response
 
 
-async def setup_complete_reauth(request: Request):
-    """Complete reauthorization by replacing the original session file with reauthorized version."""
-    form = await request.form()
-    setup_id = str(form.get("setup_id", "")).strip()
-
-    if not setup_id or setup_id not in _setup_sessions:
-        return _setup_error_fragment(request, INVALID_SETUP_SESSION_MESSAGE)
-
-    state = _setup_sessions[setup_id]
+async def _complete_reauth_from_state(
+    request: Request, setup_id: str, state: dict[str, Any]
+) -> Any:
+    """Replace the original session file with the reauthorized temp session."""
     if not state.get("authorized"):
         return _setup_error_fragment(request, NOT_AUTHORIZED_MESSAGE)
 
@@ -422,21 +480,34 @@ async def setup_complete_reauth(request: Request):
                     "S3 upload failed for reauth %s...: %s", existing_token[:8], e
                 )
 
-        # Clean up
-        state.clear()
+        # Minimal state for HTMX duplicate-poll guard
+        _setup_sessions[setup_id] = {
+            "_finalized": True,
+            "_reauth_complete": True,
+            "created_at": time.time(),
+        }
 
         return _fragment(
             request,
             "fragments/success.html",
-            {
-                "message": f"Session reauthorized successfully! Your token {existing_token[:8]}... is now active.",
-                "token": existing_token,
-            },
+            {"message": REAUTH_SUCCESS_MESSAGE},
         )
 
     except Exception as e:
         logger.warning("Failed to complete reauthorization: %s", e)
         return _setup_error_fragment(request, REAUTH_COMPLETE_FAILED_MESSAGE)
+
+
+async def setup_complete_reauth(request: Request):
+    """Complete reauthorization by replacing the original session file with reauthorized version."""
+    form = await request.form()
+    setup_id = str(form.get("setup_id", "")).strip()
+
+    if not setup_id or setup_id not in _setup_sessions:
+        return _setup_error_fragment(request, INVALID_SETUP_SESSION_MESSAGE)
+
+    state = _setup_sessions[setup_id]
+    return await _complete_reauth_from_state(request, setup_id, state)
 
 
 async def setup_generate(request: Request):
@@ -804,9 +875,10 @@ def register_web_setup_routes(mcp_app):
                 branch="reauth_code",
             )
 
-            # Ask for phone number since we can't extract it securely from session
             return _fragment(
-                request, "fragments/reauthorize_phone.html", {"setup_id": setup_id}
+                request,
+                "fragments/reauthorize_auth_options.html",
+                {"setup_id": setup_id},
             )
 
         except Exception as e:
@@ -982,6 +1054,35 @@ def register_web_setup_routes(mcp_app):
         """
         await cleanup_stale_setup_sessions()
 
+        form = await request.form()
+        posted_setup_id = str(form.get("setup_id", "")).strip()
+
+        if posted_setup_id:
+            state = _setup_sessions.get(posted_setup_id)
+            if state and state.get("reauthorizing"):
+                client = state.get("client")
+                if not client:
+                    return _fragment(
+                        request,
+                        "fragments/reauthorize_token_form.html",
+                        {"error": REAUTH_SETUP_EXPIRED_MESSAGE},
+                    )
+                try:
+                    return await _start_qr_on_client(
+                        request,
+                        setup_id=posted_setup_id,
+                        client=client,
+                        state=state,
+                        reauthorizing=True,
+                    )
+                except QrLoginError as e:
+                    return _setup_error_fragment(request, str(e))
+            return _fragment(
+                request,
+                "fragments/reauthorize_token_form.html",
+                {"error": REAUTH_SETUP_EXPIRED_MESSAGE},
+            )
+
         setup_id = str(int(time.time() * 1000))
         temp_session_path = (
             cfg().session_directory / f"{SETUP_SESSION_PREFIX}{setup_id}.session"
@@ -995,26 +1096,7 @@ def register_web_setup_routes(mcp_app):
             temp_session_path.unlink(missing_ok=True)
             return _setup_error_fragment(request, f"Failed to connect: {e}")
 
-        qr_mgr = _get_qr_manager()
-        try:
-            qr_session_id, qr_url = await qr_mgr.create_session(client)
-        except QrLoginError as e:
-            await client.disconnect()
-            temp_session_path.unlink(missing_ok=True)
-            return _setup_error_fragment(request, str(e))
-
-        # Generate QR code image as base64 PNG
-        qr = qrcode.QRCode(box_size=10, border=2)
-        qr.add_data(qr_url)
-        qr.make(fit=True)
-        img = qr.make_image()
-        buf = BytesIO()
-        img.save(buf, format="PNG")
-        qr_b64 = base64.b64encode(buf.getvalue()).decode()
-
-        # Store setup session state
         _setup_sessions[setup_id] = {
-            "qr_session_id": qr_session_id,
             "session_path": str(temp_session_path),
             "client": client,
             "authorized": False,
@@ -1022,20 +1104,19 @@ def register_web_setup_routes(mcp_app):
             "flow_id": str(uuid.uuid4()),
         }
 
-        # Auth telemetry: QR session created
-        fid = _setup_sessions[setup_id]["flow_id"]
-        buffer_auth_event(
-            event="qr_session_created", flow_id=fid, method="qr", branch="qr_scan"
-        )
-
-        return _fragment(
-            request,
-            "fragments/qr_display.html",
-            {
-                "setup_id": setup_id,
-                "qr_image": qr_b64,
-            },
-        )
+        try:
+            return await _start_qr_on_client(
+                request,
+                setup_id=setup_id,
+                client=client,
+                state=_setup_sessions[setup_id],
+                reauthorizing=False,
+            )
+        except QrLoginError as e:
+            await client.disconnect()
+            temp_session_path.unlink(missing_ok=True)
+            _setup_sessions.pop(setup_id, None)
+            return _setup_error_fragment(request, str(e))
 
     @mcp_app.custom_route("/setup/qr/status", methods=["GET"])
     async def setup_qr_status(request: Request):
@@ -1058,6 +1139,12 @@ def register_web_setup_routes(mcp_app):
         # Guard: prevent re-entering completion for already-finalized sessions
         # (HTMX can send duplicate requests for the same completed status)
         if state.get("_finalized"):
+            if state.get("_reauth_complete"):
+                return _fragment(
+                    request,
+                    "fragments/success.html",
+                    {"message": REAUTH_SUCCESS_MESSAGE},
+                )
             return _fragment(
                 request,
                 "fragments/config.html",
@@ -1081,24 +1168,28 @@ def register_web_setup_routes(mcp_app):
         status = await qr_mgr.poll_status(qr_session_id)
 
         fid = state.get("flow_id", "")
+        method = _qr_auth_method(state)
 
         if status == "completed":
             state["authorized"] = True
             buffer_auth_event(
-                event="user_scanned_qr", flow_id=fid, method="qr", branch="qr_scan"
+                event="user_scanned_qr", flow_id=fid, method=method, branch="qr_scan"
             )
             buffer_auth_event(
-                event="qr_login_confirmed", flow_id=fid, method="qr", branch="qr_scan"
+                event="qr_login_confirmed", flow_id=fid, method=method, branch="qr_scan"
             )
             buffer_auth_event(
-                event="session_established", flow_id=fid, method="qr", branch="qr_scan"
+                event="session_established",
+                flow_id=fid,
+                method=method,
+                branch="qr_scan",
             )
             flush_auth_events(fid)
             return await _complete_qr_login(request, state, qr_session_id, setup_id)
 
         if status == "expired":
             buffer_auth_event(
-                event="qr_expired", flow_id=fid, method="qr", branch="qr_scan"
+                event="qr_expired", flow_id=fid, method=method, branch="qr_scan"
             )
             flush_auth_events(fid)
             return _fragment(
@@ -1109,7 +1200,7 @@ def register_web_setup_routes(mcp_app):
 
         if status == "2fa_required":
             buffer_auth_event(
-                event="user_scanned_qr", flow_id=fid, method="qr", branch="qr_2fa"
+                event="user_scanned_qr", flow_id=fid, method=method, branch="qr_2fa"
             )
             hint = qr_mgr.get_password_hint(qr_session_id)
             response = _fragment(
@@ -1163,8 +1254,9 @@ def register_web_setup_routes(mcp_app):
         hint = qr_mgr.get_password_hint(qr_session_id)
 
         fid = state.get("flow_id", "")
+        method = _qr_auth_method(state)
         buffer_auth_event(
-            event="user_submitted_password", flow_id=fid, method="qr", branch="qr_2fa"
+            event="user_submitted_password", flow_id=fid, method=method, branch="qr_2fa"
         )
 
         try:
@@ -1172,17 +1264,17 @@ def register_web_setup_routes(mcp_app):
             state["authorized"] = True
             logger.info("QR login 2FA completed for session %s", setup_id)
             buffer_auth_event(
-                event="password_validated", flow_id=fid, method="qr", branch="qr_2fa"
+                event="password_validated", flow_id=fid, method=method, branch="qr_2fa"
             )
             buffer_auth_event(
-                event="session_established", flow_id=fid, method="qr", branch="qr_2fa"
+                event="session_established", flow_id=fid, method=method, branch="qr_2fa"
             )
             flush_auth_events(fid)
         except PasswordHashInvalidError:
             buffer_auth_event(
                 event="password_validated",
                 flow_id=fid,
-                method="qr",
+                method=method,
                 branch="qr_2fa",
                 error="2fa_wrong_password",
             )
@@ -1200,7 +1292,7 @@ def register_web_setup_routes(mcp_app):
             buffer_auth_event(
                 event="password_validated",
                 flow_id=fid,
-                method="qr",
+                method=method,
                 branch="qr_2fa",
                 error=categorize_auth_error(e),
             )

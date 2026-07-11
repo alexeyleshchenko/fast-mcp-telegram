@@ -3,6 +3,7 @@
         <p>QR code expired. No one scanned it in time.</p>
     </div>
     <form hx-post="/setup/qr" hx-target="#setup-flow" hx-swap="innerHTML" style="margin-top: 1rem;">
+        {% if setup_id %}<input type="hidden" name="setup_id" value="{{ setup_id }}" />{% endif %}
         <button type="submit">Regenerate QR Code</button>
     </form>
 </div>
