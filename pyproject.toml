@@ -26,7 +26,7 @@ classifiers = [
 ]
 dependencies = [
     "fastmcp-slim[server]>=3.3",
-    "telethon",
+    "telethon>=1.44.0",
     "TelethonFakeTLS",  # For fake TLS (EE prefix) MTProto proxy support
     "jinja2",
     "pydantic-settings",

@@ -1,5 +1,9 @@
 ## Current Work Focus
 
+**Rich message read (2026-07-12):** `get_messages` flattens MTProto `Message.rich_message` PageBlocks to `text` with `rich: true`; rich-only bot posts no longer filtered from browse. Rich media uses ID-keyed attachment tickets (`rich_kind` + `rich_media_id`); `attachments[]` in tree order. Telethon floor `>=1.44.0`. Tests: `tests/test_rich_message_format.py`, extended `test_attachment_streaming.py`.
+
+---
+
 **message_ids missing-id contract (2026-07-12):** Explicit `message_ids` returns per-id stubs under `{messages, has_more: false}` (single = multi); operational `ok: false` still top-level. Internal batched id fetches omit deleted gaps silently. `FromUser` annotation documents no display-name search. Tests in `tests/test_read_messages_by_ids_gaps.py`.
 
 ---

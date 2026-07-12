@@ -340,13 +340,149 @@ async def test_stream_content_disposition_with_non_ascii_filename():
 async def test_media_size_hint_from_document_on_media():
     from src.server_components.attachment_routes import _media_size_hint_for_log
 
-    class FakeDoc:
+    class Document:
         size = 42
 
-    class FakeMedia:
-        document = FakeDoc()
+    assert _media_size_hint_for_log(Document()) == 42
+
+
+@pytest.mark.asyncio
+async def test_mint_rich_ticket_stores_kind_and_id():
+    tid = await mint_attachment_ticket(
+        "tok",
+        -1001,
+        42,
+        filename="photo.jpg",
+        mime_type="image/jpeg",
+        rich_kind="photo",
+        rich_media_id=555,
+    )
+    got = await get_attachment_ticket(tid)
+    assert got is not None
+    assert got.rich_kind == "photo"
+    assert got.rich_media_id == 555
+
+
+@pytest.mark.asyncio
+async def test_stream_rich_photo_by_id():
+    tid = await mint_attachment_ticket(
+        "sess-tok",
+        -1001,
+        7,
+        filename="p.jpg",
+        mime_type="image/jpeg",
+        rich_kind="photo",
+        rich_media_id=101,
+    )
+
+    class FakePhoto:
+        id = 101
+
+    class FakeRich:
+        photos = [FakePhoto()]
+        documents = []
 
     class FakeMsg:
-        media = FakeMedia()
+        media = None
+        rich_message = FakeRich()
 
-    assert _media_size_hint_for_log(FakeMsg()) == 42
+    class FakeClient:
+        async def get_messages(self, chat_id, ids):
+            return FakeMsg()
+
+        async def iter_download(self, target, **kwargs):
+            assert getattr(target, "id", None) == 101
+            yield b"img"
+
+    req = MagicMock()
+    req.path_params = {"ticket_id": tid}
+
+    with patch(
+        "src.server_components.attachment_routes.get_connected_client",
+        new=AsyncMock(return_value=FakeClient()),
+    ):
+        resp = await handle_attachment_download(req)
+
+    assert resp.status_code == 200
+    body = b""
+    async for part in resp.body_iterator:
+        body += part
+    assert body == b"img"
+
+
+@pytest.mark.asyncio
+async def test_stream_rich_document_by_id():
+    tid = await mint_attachment_ticket(
+        "sess-tok",
+        -1001,
+        8,
+        filename="v.mp4",
+        mime_type="video/mp4",
+        rich_kind="document",
+        rich_media_id=202,
+    )
+
+    class FakeDoc:
+        id = 202
+        size = 50
+
+    class FakeRich:
+        photos = []
+        documents = [FakeDoc()]
+
+    class FakeMsg:
+        media = None
+        rich_message = FakeRich()
+
+    class FakeClient:
+        async def get_messages(self, chat_id, ids):
+            return FakeMsg()
+
+        async def iter_download(self, target, **kwargs):
+            assert getattr(target, "id", None) == 202
+            yield b"vid"
+
+    req = MagicMock()
+    req.path_params = {"ticket_id": tid}
+
+    with patch(
+        "src.server_components.attachment_routes.get_connected_client",
+        new=AsyncMock(return_value=FakeClient()),
+    ):
+        resp = await handle_attachment_download(req)
+
+    assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_stream_rich_missing_id_returns_404():
+    tid = await mint_attachment_ticket(
+        "sess-tok",
+        -1001,
+        9,
+        rich_kind="photo",
+        rich_media_id=999,
+    )
+
+    class FakeRich:
+        photos = []
+        documents = []
+
+    class FakeMsg:
+        media = None
+        rich_message = FakeRich()
+
+    class FakeClient:
+        async def get_messages(self, chat_id, ids):
+            return FakeMsg()
+
+    req = MagicMock()
+    req.path_params = {"ticket_id": tid}
+
+    with patch(
+        "src.server_components.attachment_routes.get_connected_client",
+        new=AsyncMock(return_value=FakeClient()),
+    ):
+        resp = await handle_attachment_download(req)
+
+    assert resp.status_code == 404

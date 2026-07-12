@@ -21,6 +21,7 @@ def _make_message_empty(msg_id: int):
     empty.caption = None
     empty.media = None
     empty.action = None
+    empty.rich_message = None
     return empty
 
 

@@ -23,6 +23,8 @@ class AttachmentTicket:
     expires_at: float
     filename: str | None
     mime_type: str | None
+    rich_kind: str | None = None
+    rich_media_id: int | None = None
 
 
 _tickets: dict[str, AttachmentTicket] = {}
@@ -71,6 +73,8 @@ async def mint_attachment_ticket(
     *,
     filename: str | None = None,
     mime_type: str | None = None,
+    rich_kind: str | None = None,
+    rich_media_id: int | None = None,
 ) -> str:
     """Create a ticket; returns UUID string. Multi-use until expiry."""
     config = cfg()
@@ -83,6 +87,8 @@ async def mint_attachment_ticket(
         expires_at=expires_at,
         filename=filename,
         mime_type=mime_type,
+        rich_kind=rich_kind,
+        rich_media_id=rich_media_id,
     )
     async with _lock:
         _prune_expired_unlocked()

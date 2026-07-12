@@ -1,4 +1,5 @@
 ### 2026-07-12
+- **Rich message read:** Flatten `Message.rich_message` PageBlocks to markdown-ish `text` with `rich: true`; `message_has_displayable_content` treats rich-only messages as displayable. Rich embeds stream via attachment tickets keyed by `rich_kind` + `rich_media_id` (Telegram object id). `attachments[]` from tree-order block walk; `media` aliases first item. `telethon>=1.44.0`. Docs: Tools-Reference Uniform Message Schema.
 - **message_ids missing-id contract:** `_handle_ids_mode` promotes only `ok: false` operational errors; per-id stubs for missing/deleted ids (including `MessageEmpty`) stay under `{messages, has_more: false}`. `_get_messages_by_ids_batched` filters via `message_has_displayable_content`. `FromUser` Field + Tools-Reference document no display-name search. Tests: `tests/test_read_messages_by_ids_gaps.py`.
 
 ### 2026-07-09

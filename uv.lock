@@ -663,7 +663,7 @@ requires-dist = [
     { name = "pydantic-settings" },
     { name = "pyyaml" },
     { name = "qrcode", extras = ["pil"] },
-    { name = "telethon" },
+    { name = "telethon", specifier = ">=1.44.0" },
     { name = "telethonfaketls" },
 ]
 provides-extras = ["s3"]

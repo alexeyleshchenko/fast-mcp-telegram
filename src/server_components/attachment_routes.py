@@ -12,7 +12,12 @@ from telethon.types import Message
 
 from src.client.connection import get_connected_client, set_request_token
 from src.config.server_config import cfg
-from src.server_components.attachment_tickets import get_attachment_ticket
+from src.server_components.attachment_tickets import (
+    AttachmentTicket,
+    get_attachment_ticket,
+)
+from src.utils.message_format.attachments import largest_photo_size
+from src.utils.message_format.rich import resolve_rich_media
 
 logger = logging.getLogger(__name__)
 
@@ -24,26 +29,41 @@ def _content_disposition(filename: str | None) -> str:
     return f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{encoded}"
 
 
-def _media_size_hint_for_log(message: Any) -> int | None:
-    """Approximate byte size from Telethon message.media for debug logs."""
-    media = getattr(message, "media", None)
-    if media is None:
+def _resolve_rich_download_target(message: Message, ticket: AttachmentTicket) -> Any | None:
+    """Resolve Photo/Document from message.rich_message by ticket rich_kind + rich_media_id."""
+    rich_message = getattr(message, "rich_message", None)
+    if rich_message is None or ticket.rich_kind is None or ticket.rich_media_id is None:
         return None
-    doc = getattr(media, "document", None)
+    if ticket.rich_kind not in ("photo", "document"):
+        return None
+    return resolve_rich_media(rich_message, ticket.rich_kind, ticket.rich_media_id)
+
+
+def _resolve_download_target(message: Message, ticket: AttachmentTicket) -> Any | None:
+    if ticket.rich_kind and ticket.rich_media_id is not None:
+        return _resolve_rich_download_target(message, ticket)
+    return getattr(message, "media", None)
+
+
+def _media_size_hint_for_log(download_target: Any) -> int | None:
+    """Approximate byte size from media object for debug logs."""
+    if download_target is None:
+        return None
+    cls = download_target.__class__.__name__
+    if cls == "Document":
+        s = getattr(download_target, "size", None)
+        return int(s) if s is not None else None
+    if cls == "Photo":
+        largest = largest_photo_size(download_target)
+        return getattr(largest, "size", None) if largest else None
+    doc = getattr(download_target, "document", None)
     if doc is not None:
         s = getattr(doc, "size", None)
         return int(s) if s is not None else None
-    photo = getattr(media, "photo", None)
+    photo = getattr(download_target, "photo", None)
     if photo is not None:
-        sizes = getattr(photo, "sizes", None) or []
-        if sized := [
-            s
-            for s in sizes
-            if getattr(s, "size", None) is not None
-            and type(s).__name__ != "PhotoStrippedSize"
-        ]:
-            largest = max(sized, key=lambda s: getattr(s, "size", 0))
-            return getattr(largest, "size", None)
+        largest = largest_photo_size(photo)
+        return getattr(largest, "size", None) if largest else None
     return None
 
 
@@ -68,27 +88,26 @@ async def handle_attachment_download(request: Any) -> Response | StreamingRespon
             logger.warning("attachment stream: get_messages failed: %s", e)
             return Response(status_code=502)
 
-        # Telethon returns one Message when ids is int; list/TotalList when ids is a sequence.
         if raw is None or (isinstance(raw, list) and len(raw) == 0):
             return Response(status_code=404)
-        # Handle both single Message and list of messages
         message = raw[0] if isinstance(raw, list) else raw
-        if not getattr(message, "media", None):
-            return Response(status_code=404)
-        # Telethon returns Message | list[Message] | None; narrow to Message
         message = cast("Message", message)
+
+        download_target = _resolve_download_target(message, ticket)
+        if download_target is None:
+            return Response(status_code=404)
 
         config = cfg()
         max_bytes = config.max_file_size_mb * 1024 * 1024
-
         mime = ticket.mime_type or "application/octet-stream"
-
-        size_hint = _media_size_hint_for_log(message)
+        size_hint = _media_size_hint_for_log(download_target)
 
         logger.debug(
-            "attachment stream: start chat_id=%s message_id=%s bytes_expected=%s filename=%s",
+            "attachment stream: start chat_id=%s message_id=%s rich=%s/%s bytes_expected=%s filename=%s",
             ticket.chat_id,
             ticket.message_id,
+            ticket.rich_kind,
+            ticket.rich_media_id,
             size_hint,
             ticket.filename,
         )
@@ -96,11 +115,14 @@ async def handle_attachment_download(request: Any) -> Response | StreamingRespon
         async def body():
             t0 = time.perf_counter()
             total = 0
-            media = getattr(message, "media", None)
-            if media is None:
-                return
             try:
-                async for chunk in client.iter_download(media, limit=max_bytes):
+                async for chunk in client.iter_download(download_target):
+                    if total + len(chunk) > max_bytes:
+                        remaining = max_bytes - total
+                        if remaining > 0:
+                            yield chunk[:remaining]
+                            total += remaining
+                        break
                     total += len(chunk)
                     yield chunk
             except Exception as e:

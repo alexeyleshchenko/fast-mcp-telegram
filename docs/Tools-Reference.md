@@ -862,7 +862,8 @@ All message-returning tools (search, read, send, edit) return messages in a cons
     "type": "private",
     "username": "johndoe"
   },
-  "text": "Hello world!",          // Message content (text/caption)
+  "text": "Hello world!",          // Message content (text/caption; rich messages use flattened PageBlock text)
+  "rich": true,                    // Optional. True when content came from Telegram RichMessage (Bot API 10.1+)
   "link": "https://t.me/johndoe/12345",  // Direct Telegram link (when available)
   "sender": {                     // Sender entity (same uniform schema, optional)
     "id": 133526395,
@@ -903,9 +904,17 @@ All message-returning tools (search, read, send, edit) return messages in a cons
 ```
 
 **Message Content Priority:**
-1. `text` - Primary message content
-2. `message` - Alternative text field
-3. `caption` - Media caption (if no text)
+1. When `rich_message` is present and flattening yields text, that flattened string is used (with `rich: true`).
+2. `text` - Primary plain message content
+3. `message` - Alternative text field
+4. `caption` - Media caption (if no text)
+
+**Rich messages (Bot API 10.1+ / MTProto `Message.rich_message`):**
+- Rich-only bot posts often have an empty plain `message` field; content lives in a `PageBlock` tree.
+- The server flattens blocks to markdown-ish `text` and sets `rich: true`.
+- Embedded photos/videos/audio referenced from blocks appear in `attachments` (tree order, deduplicated by media id).
+- `media` duplicates the first `attachments` entry for backward compatibility.
+- Rich attachment tickets use `rich_kind` + `rich_media_id` (Telegram object id, not array index).
 
 **Media Attachments:**
 - Lightweight metadata only (not actual files)

@@ -11,7 +11,12 @@ from src.utils.entity import (
     build_entity_dict,
 )
 
-from .attachments import _maybe_set_attachment_download_url
+from .attachments import (
+    _maybe_set_attachment_download_url,
+    _maybe_set_rich_attachment_download_urls,
+    build_rich_attachment_placeholders,
+)
+from .rich import RichMediaRef, flatten_rich_message
 
 
 def _service_action_placeholder_text(message) -> str | None:
@@ -69,9 +74,11 @@ def _has_any_media(message) -> bool:
 
 
 def message_has_displayable_content(message: Any) -> bool:
-    """True when a Telethon message has text, media, or a service placeholder."""
+    """True when a Telethon message has text, media, rich content, or a service placeholder."""
     if not message:
         return False
+    if getattr(message, "rich_message", None) is not None:
+        return True
     if (
         getattr(message, "text", None)
         or getattr(message, "message", None)
@@ -81,6 +88,30 @@ def message_has_displayable_content(message: Any) -> bool:
     if _has_any_media(message):
         return True
     return _service_action_placeholder_text(message) is not None
+
+
+def _resolve_message_text(
+    message: Any,
+    *,
+    rich_cache: tuple[str, list[RichMediaRef]] | None = None,
+) -> str | None:
+    """Plain or rich text for MCP output; rich flatten wins when non-empty."""
+    if rich_cache is not None:
+        flattened, _ = rich_cache
+        if flattened:
+            return flattened
+    elif getattr(message, "rich_message", None) is not None:
+        flattened, _ = flatten_rich_message(message.rich_message)
+        if flattened:
+            return flattened
+    plain = (
+        getattr(message, "text", None)
+        or getattr(message, "message", None)
+        or getattr(message, "caption", None)
+    )
+    if plain:
+        return plain
+    return _service_action_placeholder_text(message)
 
 
 def _decode_callback_data(button) -> str:
@@ -462,11 +493,9 @@ async def build_message_result(
     chat = build_entity_dict(entity_or_chat)
     forward_info = await _extract_forward_info(message)
 
-    full_text = (
-        getattr(message, "text", None)
-        or getattr(message, "message", None)
-        or getattr(message, "caption", None)
-    ) or _service_action_placeholder_text(message)
+    rich_message = getattr(message, "rich_message", None)
+    rich_cache = flatten_rich_message(rich_message) if rich_message is not None else None
+    full_text = _resolve_message_text(message, rich_cache=rich_cache)
 
     result: dict[str, Any] = {
         "id": message.id,
@@ -475,6 +504,9 @@ async def build_message_result(
         "link": link,
         "sender": sender,
     }
+
+    if rich_message is not None:
+        result["rich"] = True
 
     if include_chat_entity:
         result["chat"] = chat
@@ -488,12 +520,24 @@ async def build_message_result(
     # Topic metadata: derived from reply_to.forum_topic (set on forum thread messages).
     result |= extract_topic_metadata(message)
 
+    chat_id = chat.get("id") if chat else None
+
+    if rich_cache is not None:
+        _, media_refs = rich_cache
+        rich_attachments = build_rich_attachment_placeholders(rich_message, media_refs)
+        if rich_attachments:
+            await _maybe_set_rich_attachment_download_urls(
+                rich_attachments, message, chat_id
+            )
+            result["attachments"] = rich_attachments
+            result["media"] = rich_attachments[0]
+
     if hasattr(message, "media") and message.media:
         media_placeholder = _build_media_placeholder(message)
         if media_placeholder is not None:
             result["media"] = media_placeholder
             await _maybe_set_attachment_download_url(
-                result["media"], message, chat.get("id") if chat else None
+                result["media"], message, chat_id
             )
 
     if forward_info is not None:
