@@ -1,0 +1,2 @@
+include README.md LICENSE SECURITY.md CONTRIBUTING.md .env.example
+graft docs
