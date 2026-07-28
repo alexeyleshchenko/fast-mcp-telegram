@@ -625,7 +625,7 @@ wheels = [
 
 [[package]]
 name = "fast-mcp-telegram"
-version = "0.43.0"
+version = "0.44.0"
 source = { editable = "." }
 dependencies = [
     { name = "fastmcp-slim", extra = ["server"] },
