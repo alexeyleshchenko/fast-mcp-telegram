@@ -1,5 +1,11 @@
 ## Current Work Focus
 
+**Rich message send (2026-07-28):** `parse_mode="rich"` on `send_message` / `edit_message` / `send_message_to_phone` via `InputRichMessageMarkdown` or `InputRichMessageHTML` (dialect: strip code, whitelist tags). Success returns flattened `text`, `rich: true`, `rich_format`. Classic parse modes unchanged. Rich+files rejected. Telethon `>=1.44.0`. Tests: `tests/test_rich_message_send.py`.
+
+**Deferred (parked):** forced `rich_markdown`/`rich_html` literals; blocks JSON; draft streaming; rich+media refs; classic entity unparse hardening; mcp.json→`.venv`; live forum rich reply.
+
+---
+
 **Rich message read (2026-07-12):** `get_messages` flattens MTProto `Message.rich_message` PageBlocks to `text` with `rich: true`; rich-only bot posts no longer filtered from browse. Rich media uses ID-keyed attachment tickets (`rich_kind` + `rich_media_id`); `attachments[]` in tree order. Telethon floor `>=1.44.0`. Tests: `tests/test_rich_message_format.py`, extended `test_attachment_streaming.py`.
 
 ---

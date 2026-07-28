@@ -1,3 +1,6 @@
+### 2026-07-28
+- **Rich message send:** `parse_mode="rich"` on send/edit/phone uses MTProto `InputRichMessageMarkdown`/`HTML` (auto dialect: code-strip + HTML tag whitelist). Success `text` via rich flatten; `rich` + `rich_format` on `SendEditResult`. Classic markdown/html/auto unchanged. Rich+files clear error. Docs: Tools-Reference, README, tool `_DESC_*`. Tests: `tests/test_rich_message_send.py`.
+
 ### 2026-07-12
 - **v0.43.0 released:** Rich message read, web setup QR reauth, `message_ids` stubs, `find_chats` auth error surfacing. GitHub release `0.43.0`; manual deploy via `deploy.sh` (GH Actions disabled); health OK; Telegram EN+RU posted.
 - **Rich message read:** Flatten `Message.rich_message` PageBlocks to markdown-ish `text` with `rich: true`; `message_has_displayable_content` treats rich-only messages as displayable. Rich embeds stream via attachment tickets keyed by `rich_kind` + `rich_media_id` (Telegram object id). `attachments[]` from tree-order block walk; `media` aliases first item. `telethon>=1.44.0`. Docs: Tools-Reference Uniform Message Schema.

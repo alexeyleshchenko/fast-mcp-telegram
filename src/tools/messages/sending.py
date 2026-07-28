@@ -14,6 +14,7 @@ from src.tools.messages.file_handling import (
     is_own_attachment_url,
     prepare_files_for_send,
 )
+from src.tools.messages.rich_send import send_rich_via_tl
 from src.tools.messages.security import _validate_file_paths
 from src.utils.discussion import get_post_discussion_info
 from src.utils.entity import get_entity_by_id
@@ -74,6 +75,28 @@ async def _send_message_or_files(
 
     Handles validation and routing to appropriate send method.
     """
+    if parse_mode == "rich" and files:
+        return (
+            log_and_build_error(
+                operation=operation,
+                error_message=(
+                    "parse_mode='rich' cannot be combined with files. "
+                    "Send the Rich Message without files, or use classic "
+                    "parse_mode (markdown/html/auto) with a caption."
+                ),
+                params=params,
+                exception=ValueError("rich_parse_mode_with_files"),
+            ),
+            None,
+        )
+
+    if parse_mode == "rich":
+        sent_message, rich_format = await send_rich_via_tl(
+            client, entity, message, reply_to_msg_id
+        )
+        params["rich_format"] = rich_format
+        return None, sent_message
+
     effective_reply_to = reply_to_msg_id
 
     if files:
@@ -157,7 +180,7 @@ async def send_message_impl(
         message: The text message to send (becomes caption when files are provided)
         reply_to_id: ID of the message to reply to. For forum chats, pass topic root ID.
             For channel posts, automatically posts comment in discussion group.
-        parse_mode: Parse mode ('markdown' or 'html')
+        parse_mode: Parse mode ('markdown', 'html', 'auto', or 'rich')
         files: Single file or list of files. Supports three formats:
             - **data: URIs** (`data:<mime>;base64,<payload>`) — works in all server modes;
               ideal for remote deployments where local paths are unavailable.
@@ -221,6 +244,11 @@ async def send_message_impl(
     if error:
         return error
 
-    result = build_send_edit_result(sent_message, effective_entity, "sent")
+    result = build_send_edit_result(
+        sent_message,
+        effective_entity,
+        "sent",
+        rich_format=params.get("rich_format"),
+    )
     log_operation_success("Message sent", params["chat_id"])
     return result

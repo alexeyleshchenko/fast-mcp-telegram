@@ -103,10 +103,13 @@ MessageBody = Annotated[
 ]
 
 ParseMode = Annotated[
-    Literal["markdown", "html", "auto"],
+    Literal["markdown", "html", "auto", "rich"],
     Field(
         description=(
-            "'markdown', 'html', or 'auto' (detect from content). Default is 'auto'."
+            "'markdown'/'html'/'auto': classic entity formatting (auto detects). "
+            "'rich': Telegram Rich Message document; dialect auto-detected "
+            "(known HTML tags outside code → rich HTML, else rich markdown). "
+            "Default is 'auto'. parse_mode='rich' cannot be combined with files."
         )
     ),
 ]

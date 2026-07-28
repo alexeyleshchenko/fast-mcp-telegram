@@ -462,6 +462,7 @@ class TestBuildMessageResultExcludeChat:
         msg.reply_to = None
         msg.forum_topic = False
         msg.forward = None
+        msg.rich_message = None
 
         entity = Mock()
         entity.id = 456
@@ -498,6 +499,7 @@ class TestBuildMessageResultExcludeChat:
         msg.reply_to = None
         msg.forum_topic = False
         msg.forward = None
+        msg.rich_message = None
 
         entity = Mock()
         entity.id = 456
@@ -533,6 +535,7 @@ class TestBuildMessageResultExcludeChat:
         msg.reply_to = None
         msg.forum_topic = False
         msg.forward = None
+        msg.rich_message = None
 
         entity = Mock()
         entity.id = 456
@@ -575,6 +578,7 @@ class TestBuildMessageResultServicePlaceholder:
         msg.reply_to_msg_id = None
         msg.reply_to = None
         msg.forward = None
+        msg.rich_message = None
         msg.action = MessageActionPinMessage()
 
         entity = Mock()

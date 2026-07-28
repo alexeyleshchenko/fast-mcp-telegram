@@ -97,11 +97,13 @@ _DESC_GET_MESSAGES = _tool_description(
 _DESC_SEND_MESSAGE = _tool_description(
     "Send text and optional file attachments to a Telegram chat. "
     "Supports reply-to (including forum topics and channel discussion groups), "
-    "auto-detected or explicit parse_mode (markdown/html), and file attachments as "
-    "http(s) URLs, local paths, or data: URIs. "
+    "parse_mode: classic markdown/html/auto (entities) or rich (Rich Message document; "
+    "dialect auto-detected). parse_mode=rich cannot be combined with files. "
+    "File attachments as http(s) URLs, local paths, or data: URIs. "
     "When files are provided, the message text becomes a caption. "
     "For channel posts with reply_to_id, automatically posts in the linked discussion group. "
-    "Success: dict with message_id, date, chat, text, status='sent', and sender info. "
+    "Success: dict with message_id, date, chat, text, status='sent', and sender info "
+    "(rich messages also set rich=true and rich_format). "
     "Error: dict with ok=false and error string. "
     "Use send_message to create new messages; use edit_message to modify existing ones. "
     "Use send_message_to_phone when targeting a phone number instead of a chat_id. "
@@ -111,7 +113,9 @@ _DESC_EDIT_MESSAGE = _tool_description(
     "Replace the text of an existing message in a Telegram chat. "
     "Only works on messages sent by the authenticated account. "
     "Cannot edit media or other message attributes — text only. "
-    "Success: dict with message_id, date, chat, text, status='edited', and edit_date. "
+    "parse_mode: classic markdown/html/auto or rich (Rich Message; dialect auto-detected). "
+    "Success: dict with message_id, date, chat, text, status='edited', and edit_date "
+    "(rich messages also set rich=true and rich_format). "
     "Error: dict with ok=false and error string (e.g. message not found or not editable). "
     "Use edit_message to update a previously sent message; use send_message to create new ones. "
 )
@@ -132,6 +136,8 @@ _DESC_GET_CHAT_INFO = _tool_description(
 
 _DESC_SEND_PHONE = _tool_description(
     "Send to a phone number: may create a temporary contact, then send text or files. "
+    "Supports parse_mode: classic markdown/html/auto or rich (Rich Message; "
+    "dialect auto-detected). parse_mode=rich cannot be combined with files. "
     "Success: send result plus contact_was_new / contact_removed when applicable. "
 )
 

@@ -230,17 +230,34 @@ def _extract_reply_markup(message) -> dict[str, Any] | None:
     }
 
 
-def build_send_edit_result(message, chat, status: str) -> dict[str, Any]:
+def build_send_edit_result(
+    message,
+    chat,
+    status: str,
+    *,
+    rich_format: str | None = None,
+) -> dict[str, Any]:
     """Build a consistent result dictionary for send/edit operations."""
     chat_dict = build_entity_dict(chat)
     sender_dict = build_entity_dict(getattr(message, "sender", None))
 
+    rich_message = getattr(message, "rich_message", None)
+    rich_cache = (
+        flatten_rich_message(rich_message) if rich_message is not None else None
+    )
+    text = _resolve_message_text(message, rich_cache=rich_cache)
+
     result: dict[str, Any] = {
         "message_id": message.id,
         "date": message.date.isoformat(),
-        "text": message.text,
+        "text": text,
         "status": status,
     }
+
+    if rich_message is not None:
+        result["rich"] = True
+    if rich_format is not None:
+        result["rich_format"] = rich_format
 
     if chat_dict is not None:
         result["chat"] = chat_dict

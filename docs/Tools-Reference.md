@@ -416,10 +416,15 @@ send_message(
   chat_id: str,                  // Target chat ID (see Supported Chat ID Formats above)
   message: str,                  // Message content (becomes caption when files sent)
   reply_to_id?: number,          // Reply target (message ID, forum topic root, or channel post for comments)
-  parse_mode?: 'markdown'|'html'|'auto' = 'auto', // Text formatting (auto-detect by default)
-  files?: string[]               // File paths, URLs, or data: URIs (base64). Use a one-element array for a single file
+  parse_mode?: 'markdown'|'html'|'auto'|'rich' = 'auto', // Classic entities, or 'rich' for Rich Message document
+  files?: string[]               // File paths, URLs, or data: URIs (base64). Use a one-element array for a single file. Incompatible with parse_mode='rich'
 )
 ```
+
+**parse_mode:**
+- `markdown` / `html` / `auto` — classic flat text + entities (`auto` detects tags vs markdown patterns).
+- `rich` — Telegram **Rich Message** (`InputRichMessage*`). Dialect is auto-detected: known HTML tags **outside** code fences/backticks → rich HTML; otherwise rich markdown (including plain text and docs that only mention tags inside code). Cannot be combined with `files`.
+- Success for rich sends includes `rich: true` and `rich_format: "markdown"|"html"`, with `text` flattened from PageBlocks (same family as `get_messages`).
 
 **reply_to_id automatically handles:**
 - 📢 **Channel post comments** - Detects discussion group and posts comment there
@@ -480,6 +485,13 @@ send_message(
   "reply_to_id": 67890
 }}
 
+// Rich Message document (headings, lists)
+{"tool": "send_message", "params": {
+  "chat_id": "me",
+  "message": "## Status\n\n- item a\n- item b",
+  "parse_mode": "rich"
+}}
+
 // Post into a forum topic (use topic_id from get_chat_info topics list as reply_to_id)
 {"tool": "send_message", "params": {
   "chat_id": "-1001234567890",
@@ -503,7 +515,7 @@ edit_message(
   chat_id: str,                  // Target chat ID (see Supported Chat ID Formats above)
   message_id: number,            // Message ID to edit (required)
   message: str,                  // New message content
-  parse_mode?: 'markdown'|'html'|'auto' = 'auto' // Text formatting (auto-detect by default)
+  parse_mode?: 'markdown'|'html'|'auto'|'rich' = 'auto' // Classic entities, or 'rich' for Rich Message
 )
 ```
 
@@ -530,6 +542,14 @@ edit_message(
   "message": "<b>Updated:</b> Meeting rescheduled to 4 PM",
   "parse_mode": "html"
 }}
+
+// Edit to Rich Message
+{"tool": "edit_message", "params": {
+  "chat_id": "me",
+  "message_id": 67890,
+  "message": "## Updated\n\n- done",
+  "parse_mode": "rich"
+}}
 ```
 
 ### send_message_to_phone
@@ -542,7 +562,7 @@ send_message_to_phone(
   first_name?: str = "Contact", // For new contacts
   last_name?: str = "Name",    // For new contacts
   remove_if_new?: boolean = false, // Remove temp contact after send
-  parse_mode?: 'markdown'|'html'|'auto' = 'auto',  // Text formatting (auto-detect by default)
+  parse_mode?: 'markdown'|'html'|'auto'|'rich' = 'auto',  // Classic or 'rich' (no files with rich)
   files?: string | string[]    // File URL(s), data: URI(s), or local path(s)
 )
 ```
@@ -823,7 +843,7 @@ All tools include MCP ToolAnnotations to help AI agents make informed decisions:
 
 This MCP server uses `Literal` parameter types to guide AI model choices and ensure valid inputs:
 
-- **`parse_mode`**: Constrained to `"markdown"`, `"html"`, or `"auto"` (default: `"auto"`)
+- **`parse_mode`**: Constrained to `"markdown"`, `"html"`, `"auto"`, or `"rich"` (default: `"auto"`). `"rich"` sends/edits a Rich Message document (not classic entities).
 - **`chat_type`**: Limited to `"private"`, `"group"`, `"channel"`, or `"bot"` for search filters (bots return `type: "bot"` instead of `type: "private"`)
 - **Enhanced Validation**: FastMCP automatically validates these constraints
 - **Better AI Guidance**: AI models see only valid options, reducing errors
@@ -850,7 +870,7 @@ All tools return chat/user objects in the same schema via `build_entity_dict`:
 
 ### Uniform Message Schema
 
-All message-returning tools (search, read, send, edit) return messages in a consistent schema via `build_message_result`:
+Read/search tools use `build_message_result`. Send/edit/phone success payloads use `build_send_edit_result` (fields `message_id`, `status`, etc.) but share the same text/`rich` conventions for Rich Messages.
 
 ```json
 {
@@ -910,8 +930,10 @@ All message-returning tools (search, read, send, edit) return messages in a cons
 4. `caption` - Media caption (if no text)
 
 **Rich messages (Bot API 10.1+ / MTProto `Message.rich_message`):**
-- Rich-only bot posts often have an empty plain `message` field; content lives in a `PageBlock` tree.
-- The server flattens blocks to markdown-ish `text` and sets `rich: true`.
+- Send/edit/phone with `parse_mode="rich"` create or update Rich Messages (see Write tools above).
+- Rich-only posts often have an empty plain `message` field; content lives in a `PageBlock` tree.
+- The server flattens blocks to markdown-ish `text` and sets `rich: true` on read and on send/edit success.
+- Send/edit success also includes `rich_format: "markdown"|"html"` indicating which InputRichMessage dialect was used.
 - Embedded photos/videos/audio referenced from blocks appear in `attachments` (tree order, deduplicated by media id).
 - `media` duplicates the first `attachments` entry for backward compatibility.
 - Rich attachment tickets use `rich_kind` + `rich_media_id` (Telegram object id, not array index).

@@ -138,11 +138,11 @@ Deploy your own MCP server on a VDS — see [Installation Guide](docs/Installati
 |------|---------|--------------|
 | `search_messages_globally` | Search across all chats | Multi-term queries, date filtering, chat type filtering |
 | `get_messages` | Unified message retrieval | Search/browse, read by IDs, get replies (posts/topics/messages), date filtering in all modes |
-| `send_message` | Send new message | File attachments (URLs/local/data URIs), formatting (markdown/html), reply to forum topics |
-| `edit_message` | Edit existing message | Text formatting, preserves message structure |
+| `send_message` | Send new message | File attachments (URLs/local/data URIs), classic formatting (markdown/html), `parse_mode=rich` Rich Messages, reply to forum topics |
+| `edit_message` | Edit existing message | Classic or `parse_mode=rich` formatting |
 | `find_chats` | Find users/groups/channels | Multi-term search, contact discovery, folder filtering, username/phone lookup |
 | `get_chat_info` | Get detailed profile info | Member counts, bio/about, online status, forum topics, enriched data |
-| `send_message_to_phone` | Message phone numbers | Auto-contact management, optional cleanup, file support (URLs/data URIs) |
+| `send_message_to_phone` | Message phone numbers | Auto-contact management, optional cleanup, file support (URLs/data URIs), `parse_mode=rich` |
 | `invoke_mtproto` | Direct Telegram API (power user) | Raw MTProto methods, entity resolution, safety guardrails — see [MTProto Bridge](docs/MTProto-Bridge.md) |
 
 See [Tools Reference](docs/Tools-Reference.md) for detailed documentation with examples.
@@ -167,5 +167,3 @@ Auth flow telemetry since v0.38.0 — atomic events during setup (phone, QR, bot
 MIT License - see [LICENSE](LICENSE)
 
 mcp-name: io.github.leshchenko1979/fast-mcp-telegram
-
-

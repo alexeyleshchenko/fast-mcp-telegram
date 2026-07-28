@@ -153,7 +153,9 @@ async def send_message_to_phone_impl(
                 "(remove_if_new=True but contact was not new)"
             )
 
-        result = build_send_edit_result(sent_message, user, "sent")
+        result = build_send_edit_result(
+            sent_message, user, "sent", rich_format=params.get("rich_format")
+        )
 
         result.update(
             {

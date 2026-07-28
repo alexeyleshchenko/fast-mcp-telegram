@@ -62,6 +62,8 @@ class SendEditResult(_ErrorFields, total=False):
     reply_markup: dict[str, Any]
     edit_date: str
     topic_id: int
+    rich: bool
+    rich_format: str
 
 
 # ---------------------------------------------------------------------------

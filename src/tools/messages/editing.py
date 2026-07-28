@@ -7,6 +7,7 @@ from typing import Any, cast
 
 from src.client.connection import get_connected_client
 from src.tools.messages.core import _normalize_parse_mode, detect_message_formatting
+from src.tools.messages.rich_send import edit_rich_via_tl
 from src.utils.entity import get_entity_by_id
 from src.utils.error_handling import log_and_build_error
 from src.utils.logging_utils import log_operation_start, log_operation_success
@@ -28,7 +29,7 @@ async def edit_message_impl(
         chat_id: The ID of the chat containing the message
         message_id: ID of the message to edit
         new_text: The new text content for the message
-        parse_mode: Parse mode ('markdown' or 'html')
+        parse_mode: Parse mode ('markdown', 'html', 'auto', or 'rich')
     """
     parse_mode = _normalize_parse_mode(parse_mode)
     params = {
@@ -59,14 +60,22 @@ async def edit_message_impl(
                 ),
             )
 
-        edited_message = await client.edit_message(
-            entity=chat,
-            message=message_id,
-            text=new_text,
-            parse_mode=cast(Any, resolved_parse_mode or None),
-        )
+        rich_format = None
+        if resolved_parse_mode == "rich":
+            edited_message, rich_format = await edit_rich_via_tl(
+                client, chat, message_id, new_text
+            )
+        else:
+            edited_message = await client.edit_message(
+                entity=chat,
+                message=message_id,
+                text=new_text,
+                parse_mode=cast(Any, resolved_parse_mode or None),
+            )
 
-        result = build_send_edit_result(edited_message, chat, "edited")
+        result = build_send_edit_result(
+            edited_message, chat, "edited", rich_format=rich_format
+        )
         result |= extract_topic_metadata(edited_message)
 
         log_operation_success("Message edited", chat_id)
