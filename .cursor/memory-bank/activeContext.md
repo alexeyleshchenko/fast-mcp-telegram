@@ -1,8 +1,8 @@
 ## Current Work Focus
 
-**Rich message send (2026-07-28):** `parse_mode="rich"` on `send_message` / `edit_message` / `send_message_to_phone` via `InputRichMessageMarkdown` or `InputRichMessageHTML` (dialect: strip code, whitelist tags). Success returns flattened `text`, `rich: true`, `rich_format`. Classic parse modes unchanged. Rich+files rejected. Telethon `>=1.44.0`. Tests: `tests/test_rich_message_send.py`.
+**v0.44.0 shipped (2026-07-28):** Rich send/edit on master + GitHub release. VDS healthy on dirty-build tag from deploy. GH Actions still disabled (no auto PyPI). Reload telegram-dev MCP to pick up `parse_mode=rich`.
 
-**Deferred (parked):** forced `rich_markdown`/`rich_html` literals; blocks JSON; draft streaming; rich+media refs; classic entity unparse hardening; mcp.json→`.venv`; live forum rich reply.
+**Deferred (parked):** forced `rich_markdown`/`rich_html` literals; blocks JSON; draft streaming; rich+media refs; classic entity unparse hardening; mcp.json→`.venv`; live forum rich reply; manual PyPI for 0.44.0 if needed.
 
 ---
 

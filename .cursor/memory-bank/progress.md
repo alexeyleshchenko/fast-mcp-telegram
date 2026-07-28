@@ -1,4 +1,5 @@
 ### 2026-07-28
+- **v0.44.0 released:** Rich message send/edit via `parse_mode="rich"`. GitHub release `0.44.0`; manual deploy via `deploy.sh` (GH Actions disabled — PyPI publish workflow cannot run); container healthy; public `/health` 200.
 - **Rich message send:** `parse_mode="rich"` on send/edit/phone uses MTProto `InputRichMessageMarkdown`/`HTML` (auto dialect: code-strip + HTML tag whitelist). Success `text` via rich flatten; `rich` + `rich_format` on `SendEditResult`. Classic markdown/html/auto unchanged. Rich+files clear error. Docs: Tools-Reference, README, tool `_DESC_*`. Tests: `tests/test_rich_message_send.py`.
 
 ### 2026-07-12
