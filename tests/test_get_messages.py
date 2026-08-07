@@ -1738,6 +1738,7 @@ class TestGetMessagesContextHelpers:
         msg.caption = None
         msg.media = None
         msg.action = None
+        msg.rich_message = None
         assert _is_valid_context_neighbor(msg, False, None) is False
 
     def test_is_valid_context_neighbor_accepts_text_messages(self):
