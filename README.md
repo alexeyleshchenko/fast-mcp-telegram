@@ -25,9 +25,9 @@ curl -X POST "https://tg-mcp.l1979.ru/mtproto-api/messages.SendMessage" \
 
 [![Python Version](https://img.shields.io/badge/python-3.11+-blue.svg)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Docker Ready](https://img.shields.io/badge/Docker-Ready-blue?logo=docker)](https://github.com/leshchenko1979/fast-mcp-telegram)
+[![Docker Ready](https://img.shields.io/badge/Docker-Ready-blue?logo=docker)](https://github.com/alexeyleshchenko/fast-mcp-telegram)
 [![Health Status](https://gatus.l1979.ru/api/v1/endpoints/apps_fast-mcp-telegram/uptimes/30d/badge.svg)](https://gatus.l1979.ru/endpoints/apps_fast-mcp-telegram)
-[![Glama Score](https://glama.ai/mcp/servers/leshchenko1979/fast-mcp-telegram/badges/score.svg)](https://glama.ai/mcp/servers/leshchenko1979/fast-mcp-telegram)
+[![Glama Score](https://glama.ai/mcp/servers/alexeyleshchenko/fast-mcp-telegram/badges/score.svg)](https://glama.ai/mcp/servers/alexeyleshchenko/fast-mcp-telegram)
 
 ## How It Works
 
@@ -166,4 +166,4 @@ Auth flow telemetry since v0.38.0 — atomic events during setup (phone, QR, bot
 
 MIT License - see [LICENSE](LICENSE)
 
-mcp-name: io.github.leshchenko1979/fast-mcp-telegram
+mcp-name: io.github.alexeyleshchenko/fast-mcp-telegram

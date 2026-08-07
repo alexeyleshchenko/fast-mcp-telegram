@@ -7,11 +7,11 @@ This file tracks where **fast-mcp-telegram** has been published or listed, with 
 | Resource | URL | Status | Notes |
 |----------|-----|--------|-------|
 | **PyPI** | https://pypi.org/project/fast-mcp-telegram/ | ✅ Live (v0.35.0) | `pip install fast-mcp-telegram` |
-| **Glama** | https://glama.ai/mcp/servers/leshchenko1979/fast-mcp-telegram | ⏳ Submitted for review | Connector submitted by user — awaiting Glama review to index tools |
+| **Glama** | https://glama.ai/mcp/servers/alexeyleshchenko/fast-mcp-telegram | ⏳ Submitted for review | Connector submitted by user — awaiting Glama review to index tools |
 | **Docker (GHCR)** | `ghcr.io/leshchenko1979/fast-mcp-telegram:*` | ✅ Live | Published alongside releases |
 | **RemoteMCPList** | https://github.com/remotemcplist/servers/issues/22 | ⏳ Issue open | GitHub issue #22 — not yet merged |
 | **ToolSDK Registry** | https://github.com/toolsdk-ai/toolsdk-mcp-registry/pull/324 | ✅ MERGED | PR #324 merged |
-| **Official MCP Registry** | https://registry.modelcontextprotocol.io | ✅ Published (v0.36.0) | Name: `io.github.leshchenko1979/fast-mcp-telegram`. Published via `mcp-publisher publish`. Uses `MCP_GITHUB_TOKEN` env var to bypass device code flow. URL: `servers/io.github.leshchenko1979%2Ffast-mcp-telegram/versions` |
+| **Official MCP Registry** | https://registry.modelcontextprotocol.io | ✅ Published (v0.36.0) | Name: `io.github.alexeyleshchenko/fast-mcp-telegram`. Published via `mcp-publisher publish`. Uses `MCP_GITHUB_TOKEN` env var to bypass device code flow. URL: `servers/io.github.alexeyleshchenko%2Ffast-mcp-telegram/versions` |
 | **mcp.so** | https://mcp.so/servers/678f0b7fc72dda6b377d9800 | ✅ 200 — search broken | Direct URL works but site search returns 404 (site issue, not ours) |
 | **Smithery** | https://smithery.ai/servers/leshchenko/fast-mcp-telegram | ✅ Live | Re-published 2026-06-17 via CLI. Namespace: `leshchenko` (not `leshchenko1979`). API key: `553a7ea1-...` in Smithery console. All 8 tools indexed in API. Not yet in search results for "telegram" — may need indexing time. |
 
