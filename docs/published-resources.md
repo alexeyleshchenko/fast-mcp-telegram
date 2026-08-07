@@ -8,7 +8,7 @@ This file tracks where **fast-mcp-telegram** has been published or listed, with 
 |----------|-----|--------|-------|
 | **PyPI** | https://pypi.org/project/fast-mcp-telegram/ | ✅ Live (v0.35.0) | `pip install fast-mcp-telegram` |
 | **Glama** | https://glama.ai/mcp/servers/alexeyleshchenko/fast-mcp-telegram | ⏳ Submitted for review | Connector submitted by user — awaiting Glama review to index tools |
-| **Docker (GHCR)** | `ghcr.io/leshchenko1979/fast-mcp-telegram:*` | ✅ Live | Published alongside releases |
+| **Docker (GHCR)** | `ghcr.io/alexeyleshchenko/fast-mcp-telegram:*` | ✅ Live | Published alongside releases |
 | **RemoteMCPList** | https://github.com/remotemcplist/servers/issues/22 | ⏳ Issue open | GitHub issue #22 — not yet merged |
 | **ToolSDK Registry** | https://github.com/toolsdk-ai/toolsdk-mcp-registry/pull/324 | ✅ MERGED | PR #324 merged |
 | **Official MCP Registry** | https://registry.modelcontextprotocol.io | ✅ Published (v0.36.0) | Name: `io.github.alexeyleshchenko/fast-mcp-telegram`. Published via `mcp-publisher publish`. Uses `MCP_GITHUB_TOKEN` env var to bypass device code flow. URL: `servers/io.github.alexeyleshchenko%2Ffast-mcp-telegram/versions` |

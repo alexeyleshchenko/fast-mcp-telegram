@@ -120,7 +120,7 @@ jobs:
             content = textwrap.dedent('''
               services:
                 telemetry-collector:
-                  image: ghcr.io/leshchenko1979/telemetry-collector:main
+                  image: ghcr.io/alexeyleshchenko/telemetry-collector:main
                   container_name: telemetry-collector
                   restart: unless-stopped
                   environment:
