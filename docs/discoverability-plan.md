@@ -9,7 +9,7 @@ When a user searches for "telegram mcp" on any registry, **fast-mcp-telegram doe
 | Registry | Status | Search visibility | Action needed |
 |----------|--------|------------------|---------------|
 | **PyPI** | ✅ v0.35.0 | ✅ `pip install fast-mcp-telegram` | Done |
-| **Official MCP Registry** | ✅ Published (v0.35.0) | ✅ Listed as `io.github.leshchenko1979/fast-mcp-telegram` | Done — published via `mcp-publisher publish` after GitHub OAuth |
+| **Official MCP Registry** | ✅ Published (v0.35.0) | ✅ Listed as `io.github.alexeyleshchenko/fast-mcp-telegram` | Done — published via `mcp-publisher publish` after GitHub OAuth |
 | **Smithery** | ✅ Live | ⚠️ Not in search results yet | All 8 tools indexed in API. May need indexing time or metadata improvements. |
 | **Glama** | ⏳ Submitted for review | ❌ `tools:[]` | User submitted connector. Awaiting Glama review to index tools. |
 | **awesome-mcp-servers** | ✅ MERGED (PR #7019) | ✅ Discoverable | Done |
@@ -23,8 +23,8 @@ When a user searches for "telegram mcp" on any registry, **fast-mcp-telegram doe
 ### Official MCP Registry — unblocked and published
 - **Blocker:** Expired GitHub JWT token, Mac Chrome had no GitHub session
 - **Fix:** User logged into GitHub on Mac Chrome → `mcp-publisher login github` device code flow → authorized → `mcp-publisher publish server.json`
-- **Extra requirement:** Registry validation demands `mcp-name: io.github.leshchenko1979/fast-mcp-telegram` in the PyPI README. Added to README.md, bumped to v0.35.0, published to PyPI via GitHub Release, then re-published to registry.
-- **Result:** ✅ Published as `io.github.leshchenko1979/fast-mcp-telegram`
+- **Extra requirement:** Registry validation demands `mcp-name: io.github.alexeyleshchenko/fast-mcp-telegram` in the PyPI README. Added to README.md, bumped to v0.35.0, published to PyPI via GitHub Release, then re-published to registry.
+- **Result:** ✅ Published as `io.github.alexeyleshchenko/fast-mcp-telegram`
 
 ### Smithery — re-published
 - **Blocker:** Listing was 404 (namespace deleted or expired)
