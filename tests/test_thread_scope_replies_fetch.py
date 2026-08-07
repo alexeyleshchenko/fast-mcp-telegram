@@ -360,6 +360,7 @@ async def test_forum_in_topic_replies_hydrate_search_stubs():
     stub.caption = None
     stub.media = None
     stub.action = None
+    stub.rich_message = None
 
     full = _mock_message(99)
     full.reply_to_msg_id = 67596
