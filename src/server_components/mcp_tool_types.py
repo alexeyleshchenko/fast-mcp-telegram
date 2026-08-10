@@ -263,6 +263,11 @@ TopicsLimit = Annotated[
     Field(description="Max forum topics to list when the chat is a forum."),
 ]
 
+CommonChatsLimit = Annotated[
+    int,
+    Field(description="Max common groups to list for user targets."),
+]
+
 # --- send_message_to_phone ---
 
 PhoneE164 = Annotated[

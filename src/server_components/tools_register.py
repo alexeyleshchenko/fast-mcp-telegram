@@ -131,7 +131,8 @@ _DESC_FIND_CHATS = _tool_description(
 
 _DESC_GET_CHAT_INFO = _tool_description(
     "Load profile and metadata for one user, bot, group, or channel. "
-    "Success: info dict; forum chats may include topics up to topics_limit. "
+    "Success: info dict; forum chats may include topics up to topics_limit; "
+    "user targets may include common_chats up to common_chats_limit. "
 )
 
 _DESC_SEND_PHONE = _tool_description(

@@ -3,10 +3,10 @@
 import logging
 from typing import Any
 
-from telethon.tl.functions.messages import GetForumTopicsRequest
+from telethon.tl.functions.messages import GetCommonChatsRequest, GetForumTopicsRequest
 
 from src.client.connection import get_connected_client
-from src.utils.entity import build_entity_dict_enriched, get_entity_by_id
+from src.utils.entity import build_entity_dict, build_entity_dict_enriched, get_entity_by_id
 from src.utils.error_handling import log_and_build_error
 
 logger = logging.getLogger(__name__)
@@ -65,18 +65,69 @@ async def _list_forum_topics(entity, limit: int = 20) -> dict[str, Any]:
     return {"topics": topics, "has_more": has_more}
 
 
-async def get_chat_info_impl(chat_id: str, topics_limit: int = 20) -> dict[str, Any]:
+async def _list_common_chats(entity, limit: int = 10) -> dict[str, Any] | None:
+    """Return compact list of chats/groups shared with a user target.
+
+    Only meaningful for user targets; returns None for anything else so the
+    field is simply omitted (non-fatal, mirrors forum-topics behavior).
+    """
+    try:
+        entity_type = entity.__class__.__name__
+    except AttributeError:
+        entity_type = ""
+    if entity_type != "User":
+        return None
+
+    try:
+        requested_limit = max(1, min(limit, 100))
+    except TypeError:
+        requested_limit = 10
+
+    try:
+        client = await get_connected_client()
+
+        result = await client(
+            GetCommonChatsRequest(user_id=entity, max_id=0, limit=requested_limit)
+        )
+
+        raw_chats = getattr(result, "chats", []) or []
+        chats = []
+        for chat in raw_chats:
+            chat_dict = build_entity_dict(chat)
+            if chat_dict is not None:
+                chats.append(chat_dict)
+
+        count = getattr(result, "count", None)
+        if count is not None:
+            has_more = count > len(chats)
+        else:
+            has_more = len(chats) >= requested_limit
+
+        return {"common_chats": chats, "common_chats_has_more": has_more}
+    except Exception as e:
+        logger.debug("Failed to fetch common chats for %s: %s", entity, e)
+        return None
+
+
+async def get_chat_info_impl(
+    chat_id: str, topics_limit: int = 20, common_chats_limit: int = 10
+) -> dict[str, Any]:
     """
     Get detailed information about a specific chat (user, group, or channel).
 
     Args:
         chat_id: The chat identifier (user/chat/channel)
         topics_limit: Max topics to include for forum-enabled chats
+        common_chats_limit: Max common groups to list for user targets
 
     Returns:
         Chat information or error message if not found
     """
-    params = {"chat_id": chat_id, "topics_limit": topics_limit}
+    params = {
+        "chat_id": chat_id,
+        "topics_limit": topics_limit,
+        "common_chats_limit": common_chats_limit,
+    }
 
     entity = await get_entity_by_id(chat_id)
 
@@ -105,5 +156,11 @@ async def get_chat_info_impl(chat_id: str, topics_limit: int = 20) -> dict[str, 
             info["topics_has_more"] = topics_result["has_more"]
         except Exception as e:
             logger.debug("Failed to fetch forum topics for %s: %s", chat_id, e)
+
+    if info.get("type") in ("private", "bot"):
+        common_chats_result = await _list_common_chats(entity, common_chats_limit)
+        if common_chats_result is not None:
+            info["common_chats"] = common_chats_result["common_chats"]
+            info["common_chats_has_more"] = common_chats_result["common_chats_has_more"]
 
     return info

@@ -141,7 +141,7 @@ Deploy your own MCP server on a VDS — see [Installation Guide](docs/Installati
 | `send_message` | Send new message | File attachments (URLs/local/data URIs), classic formatting (markdown/html), `parse_mode=rich` Rich Messages, reply to forum topics |
 | `edit_message` | Edit existing message | Classic or `parse_mode=rich` formatting |
 | `find_chats` | Find users/groups/channels | Multi-term search, contact discovery, folder filtering, username/phone lookup |
-| `get_chat_info` | Get detailed profile info | Member counts, bio/about, online status, forum topics, enriched data |
+| `get_chat_info` | Get detailed profile info | Member counts, bio/about, online status, forum topics, common groups, enriched data |
 | `send_message_to_phone` | Message phone numbers | Auto-contact management, optional cleanup, file support (URLs/data URIs), `parse_mode=rich` |
 | `invoke_mtproto` | Direct Telegram API (power user) | Raw MTProto methods, entity resolution, safety guardrails — see [MTProto Bridge](docs/MTProto-Bridge.md) |
 

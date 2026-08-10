@@ -99,6 +99,8 @@ class ChatInfoResult(_ErrorFields, total=False):
     participants_count: int
     topics: list[dict[str, Any]]
     topics_has_more: bool
+    common_chats: list[dict[str, Any]]
+    common_chats_has_more: bool
 
 
 # ---------------------------------------------------------------------------

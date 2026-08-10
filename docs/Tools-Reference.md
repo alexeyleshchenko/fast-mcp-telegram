@@ -113,6 +113,7 @@ find_chats(
 get_chat_info(
   chat_id: str,                 // User/channel identifier (see Supported Chat ID Formats above)
   topics_limit?: number = 20   // Max number of forum topics to return (1–100, forum chats only)
+  common_chats_limit?: number = 10  // Max common groups to list for user targets (1–100)
 )
 ```
 
@@ -124,6 +125,8 @@ Also includes, when applicable:
 - `is_forum: true` for forum-enabled supergroups
 - `topics`: list of `{"topic_id": number, "title": string}` entries (forum chats only)
 - `topics_has_more: true` when there are more topics than `topics_limit`
+- `common_chats`: list of compact chat dicts (same shape as `find_chats` entries) shared between the current account and a user target
+- `common_chats_has_more: true` when there are more common groups than `common_chats_limit`
 
 Counts are fetched via Telethon full-info requests and reflect current values.
 
@@ -151,6 +154,12 @@ Counts are fetched via Telethon full-info requests and reflect current values.
 
 // Get more forum topics
 {"tool": "get_chat_info", "params": {"chat_id": "-1001234567890", "topics_limit": 50}}
+
+// Get common groups for a user target (returns up to 10 by default)
+{"tool": "get_chat_info", "params": {"chat_id": "133526395"}}
+
+// Get more common groups
+{"tool": "get_chat_info", "params": {"chat_id": "133526395", "common_chats_limit": 50}}
 ```
 
 ### search_messages_globally
