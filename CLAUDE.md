@@ -1,5 +1,15 @@
 # fast-mcp-telegram
 
+Canonical GitHub repository: https://github.com/alexeyleshchenko/fast-mcp-telegram
+
+Canonical Python package: `fast-mcp-telegram` on PyPI (https://pypi.org/project/fast-mcp-telegram/).
+
+Canonical MCP registry name: `io.github.alexeyleshchenko/fast-mcp-telegram`
+
+The old GitHub URL `https://github.com/leshchenko1979/fast-mcp-telegram` is a public 404. Do not restore that owner in README links, `pyproject.toml`, `server.json`, `glama.json`, GHCR image names, or docs clone URLs. PyPI is the stable pointer.
+
+Do not create a replacement repository under `leshchenko1979/fast-mcp-telegram`. If GitHub ever unsuspends that account and allows a transfer, keep the old name free so redirects can work.
+
 Telegram MCP server (stdio, http-no-auth, http-auth). Full setup, ACL matrix, and dev workflow: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Session Corrections

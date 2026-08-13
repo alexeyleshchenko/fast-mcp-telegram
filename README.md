@@ -2,6 +2,8 @@
 
 **Telegram MCP Server** — Model Context Protocol (MCP) gateway for Telegram. 8 context-efficient tools, multi-tenant, MTProto bridge.
 
+Canonical GitHub repository: [alexeyleshchenko/fast-mcp-telegram](https://github.com/alexeyleshchenko/fast-mcp-telegram). This is the same project previously published under `leshchenko1979/fast-mcp-telegram`. The old GitHub URL is a public 404. Install remains `pip install fast-mcp-telegram` or `uvx --from fast-mcp-telegram`; PyPI is the stable pointer.
+
 ## Try the Demo
 
 1. Open https://tg-mcp.l1979.ru/setup

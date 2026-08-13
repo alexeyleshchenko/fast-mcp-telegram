@@ -1,0 +1,8 @@
+{
+  "$schema": "https://context7.com/schema/context7.json",
+  "projectTitle": "fast-mcp-telegram",
+  "description": "Telegram MCP gateway for AI agents: 8 tools, multi-tenant HTTP/stdio, MTProto User API.",
+  "branch": "master",
+  "folders": ["src", "docs", "."],
+  "excludeFolders": [".github", "tests", "collector"]
+}
