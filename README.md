@@ -2,7 +2,7 @@
 
 **Telegram MCP Server** — Model Context Protocol (MCP) gateway for Telegram. 8 context-efficient tools, multi-tenant, MTProto bridge.
 
-Canonical GitHub repository: [alexeyleshchenko/fast-mcp-telegram](https://github.com/alexeyleshchenko/fast-mcp-telegram). This is the same project previously published under `leshchenko1979/fast-mcp-telegram`. The old GitHub URL is a public 404. Install remains `pip install fast-mcp-telegram` or `uvx --from fast-mcp-telegram`; PyPI is the stable pointer.
+> Canonical GitHub repository: [alexeyleshchenko/fast-mcp-telegram](https://github.com/alexeyleshchenko/fast-mcp-telegram). This is the same project previously published under `leshchenko1979/fast-mcp-telegram`. The old GitHub URL is a public 404. Install remains `pip install fast-mcp-telegram` or `uvx --from fast-mcp-telegram`; PyPI is the stable pointer.
 
 ## Try the Demo
 
@@ -67,9 +67,6 @@ Your agent → MCP/HTTP → this server → MTProto → Telegram
 | :microphone: **[Voice Transcription](docs/Tools-Reference.md#get_messages)**                       | Automatic speech-to-text for Premium accounts with parallel processing and polling                             |
 | :zap: **High Performance**                                                                          | Async operations, parallel queries, and memory-conscious batching                                              |
 | :shield: **Production Reliability**                                                                 | Auto-reconnect, configurable logging, comprehensive error handling                                               |
-
-
-> **Prerequisite:** Install `uv` — see [docs](https://docs.astral.sh/uv/#installation) if you don't have it. Or use Docker (see [Installation Guide](docs/Installation.md)).
 
 ## Quick Start
 
